@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View,
   StyleSheet,
@@ -7,12 +7,13 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
-import { Audio } from 'expo-av';
-import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
+import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
+import { useLocalSearchParams, Stack } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { DecibelChart } from '@/components/decibel-chart';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { Colors } from '@/constants/theme';
 import {
@@ -21,25 +22,54 @@ import {
   updateRecording,
   formatDuration,
   formatDate,
+  analyzeDecibelData,
+  SNORE_THRESHOLD_DB,
 } from '@/utils/storage';
-import {
-  analyzeSnoring,
-  getSeverityColor,
-  getSeverityText,
-} from '@/utils/analysis';
+
+function getSeverityColor(severity: string): string {
+  switch (severity) {
+    case 'none':
+      return '#4CAF50';
+    case 'mild':
+      return '#8BC34A';
+    case 'moderate':
+      return '#FF9800';
+    case 'severe':
+      return '#F44336';
+    default:
+      return '#9E9E9E';
+  }
+}
+
+function getSeverityText(severity: string): string {
+  switch (severity) {
+    case 'none':
+      return '无打鼾';
+    case 'mild':
+      return '轻微';
+    case 'moderate':
+      return '中等';
+    case 'severe':
+      return '严重';
+    default:
+      return '未知';
+  }
+}
 
 export default function RecordingDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const [recording, setRecording] = useState<Recording | null>(null);
-  const [isPlaying, setIsPlaying] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [sound, setSound] = useState<Audio.Sound | null>(null);
-  const [playbackPosition, setPlaybackPosition] = useState(0);
+  const [isPlayerReady, setIsPlayerReady] = useState(false);
 
-  const router = useRouter();
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   const insets = useSafeAreaInsets();
+  const isDark = colorScheme === 'dark';
+
+  // 音频播放器 - 只在有录音 URI 时初始化
+  const player = useAudioPlayer(recording?.uri ? { uri: recording.uri } : null);
+  const status = useAudioPlayerStatus(player);
 
   const loadRecording = useCallback(async () => {
     if (id) {
@@ -52,55 +82,54 @@ export default function RecordingDetailScreen() {
     loadRecording();
   }, [loadRecording]);
 
+  // 检查播放器是否准备好
+  useEffect(() => {
+    if (recording?.uri && player) {
+      setIsPlayerReady(true);
+    }
+    return () => {
+      setIsPlayerReady(false);
+    };
+  }, [recording?.uri, player]);
+
+  // 清理播放器
   useEffect(() => {
     return () => {
-      if (sound) {
-        sound.unloadAsync();
-      }
-    };
-  }, [sound]);
-
-  const handlePlayPause = async () => {
-    if (!recording) return;
-
-    try {
-      if (isPlaying && sound) {
-        await sound.pauseAsync();
-        setIsPlaying(false);
-      } else {
-        if (sound) {
-          await sound.playAsync();
-          setIsPlaying(true);
-        } else {
-          const { sound: newSound } = await Audio.Sound.createAsync(
-            { uri: recording.uri },
-            { shouldPlay: true },
-            (status) => {
-              if (status.isLoaded) {
-                setPlaybackPosition(status.positionMillis);
-                if (status.didJustFinish) {
-                  setIsPlaying(false);
-                  setPlaybackPosition(0);
-                }
-              }
-            }
-          );
-          setSound(newSound);
-          setIsPlaying(true);
+      if (isPlayerReady) {
+        try {
+          player.pause();
+        } catch (e) {
+          // 忽略清理时的错误
         }
       }
-    } catch (error) {
-      console.error('Playback error:', error);
-      Alert.alert('错误', '无法播放录音');
+    };
+  }, [isPlayerReady, player]);
+
+  const handlePlayPause = () => {
+    if (!isPlayerReady) return;
+    try {
+      if (status.playing) {
+        player.pause();
+      } else {
+        player.play();
+      }
+    } catch (e) {
+      console.error('Playback error:', e);
     }
   };
 
   const handleAnalyze = async () => {
     if (!recording || isAnalyzing) return;
 
+    // 检查是否有分贝数据
+    if (!recording.decibelData || recording.decibelData.length === 0) {
+      Alert.alert('无法分析', '此录音没有分贝数据，无法进行分析');
+      return;
+    }
+
     setIsAnalyzing(true);
     try {
-      const analysis = await analyzeSnoring(recording.uri);
+      const analysis = analyzeDecibelData(recording.decibelData);
       await updateRecording(recording.id, { analysis });
       await loadRecording();
     } catch (error) {
@@ -121,6 +150,9 @@ export default function RecordingDetailScreen() {
   }
 
   const analysis = recording.analysis;
+  const decibelData = recording.decibelData || [];
+  const hasDecibelData = decibelData.length > 0;
+  const playbackPosition = (status?.currentTime || 0) * 1000; // 转换为毫秒
 
   return (
     <ThemedView style={styles.container}>
@@ -141,7 +173,7 @@ export default function RecordingDetailScreen() {
         <View
           style={[
             styles.card,
-            { backgroundColor: colorScheme === 'dark' ? '#1E1E1E' : '#F8F9FA' },
+            { backgroundColor: isDark ? '#1E1E1E' : '#F8F9FA' },
           ]}
         >
           <ThemedText style={styles.cardTitle}>录音信息</ThemedText>
@@ -157,13 +189,70 @@ export default function RecordingDetailScreen() {
               {formatDuration(recording.duration)}
             </ThemedText>
           </View>
+          <View style={styles.infoRow}>
+            <ThemedText style={styles.infoLabel}>数据点数</ThemedText>
+            <ThemedText style={styles.infoValue}>
+              {decibelData.length}
+            </ThemedText>
+          </View>
         </View>
+
+        {/* Decibel Chart */}
+        {hasDecibelData ? (
+          <View
+            style={[
+              styles.card,
+              { backgroundColor: isDark ? '#1E1E1E' : '#F8F9FA' },
+            ]}
+          >
+            <ThemedText style={styles.cardTitle}>分贝曲线</ThemedText>
+            <View style={styles.chartLegend}>
+              <View style={styles.legendItem}>
+                <View style={[styles.legendDot, { backgroundColor: '#6C63FF' }]} />
+                <ThemedText style={styles.legendText}>正常</ThemedText>
+              </View>
+              <View style={styles.legendItem}>
+                <View style={[styles.legendDot, { backgroundColor: '#F44336' }]} />
+                <ThemedText style={styles.legendText}>打鼾 ({'>='}{SNORE_THRESHOLD_DB}dB)</ThemedText>
+              </View>
+              <View style={styles.legendItem}>
+                <View style={[styles.legendLine, { backgroundColor: '#FF9800' }]} />
+                <ThemedText style={styles.legendText}>阈值线</ThemedText>
+              </View>
+            </View>
+            <DecibelChart
+              data={decibelData}
+              snoreEvents={analysis?.snoreEvents}
+              height={150}
+              showThreshold={true}
+              highlightSnoring={true}
+              currentPosition={status?.playing ? playbackPosition : undefined}
+            />
+          </View>
+        ) : (
+          <View
+            style={[
+              styles.card,
+              { backgroundColor: isDark ? '#1E1E1E' : '#F8F9FA' },
+            ]}
+          >
+            <ThemedText style={styles.cardTitle}>分贝曲线</ThemedText>
+            <View style={styles.noDataContainer}>
+              <ThemedText style={styles.noDataText}>
+                此录音没有分贝数据
+              </ThemedText>
+              <ThemedText style={styles.noDataSubtext}>
+                旧版本录音不包含分贝监测数据
+              </ThemedText>
+            </View>
+          </View>
+        )}
 
         {/* Playback Controls */}
         <View
           style={[
             styles.card,
-            { backgroundColor: colorScheme === 'dark' ? '#1E1E1E' : '#F8F9FA' },
+            { backgroundColor: isDark ? '#1E1E1E' : '#F8F9FA' },
           ]}
         >
           <ThemedText style={styles.cardTitle}>播放控制</ThemedText>
@@ -172,8 +261,9 @@ export default function RecordingDetailScreen() {
               style={[styles.playButton, { backgroundColor: '#6C63FF' }]}
               onPress={handlePlayPause}
               activeOpacity={0.8}
+              disabled={!isPlayerReady}
             >
-              {isPlaying ? (
+              {status?.playing ? (
                 <View style={styles.pauseIcon}>
                   <View style={styles.pauseBar} />
                   <View style={styles.pauseBar} />
@@ -191,7 +281,7 @@ export default function RecordingDetailScreen() {
                   style={[
                     styles.progressFill,
                     {
-                      width: `${(playbackPosition / recording.duration) * 100}%`,
+                      width: `${recording.duration > 0 ? (playbackPosition / recording.duration) * 100 : 0}%`,
                       backgroundColor: '#6C63FF',
                     },
                   ]}
@@ -205,7 +295,7 @@ export default function RecordingDetailScreen() {
         <View
           style={[
             styles.card,
-            { backgroundColor: colorScheme === 'dark' ? '#1E1E1E' : '#F8F9FA' },
+            { backgroundColor: isDark ? '#1E1E1E' : '#F8F9FA' },
           ]}
         >
           <ThemedText style={styles.cardTitle}>打鼾分析</ThemedText>
@@ -239,15 +329,34 @@ export default function RecordingDetailScreen() {
                 </View>
               </View>
 
+              <View style={styles.decibelStats}>
+                <View style={styles.decibelStatItem}>
+                  <ThemedText style={styles.decibelStatValue}>{analysis.avgDecibel}</ThemedText>
+                  <ThemedText style={styles.decibelStatLabel}>平均分贝</ThemedText>
+                </View>
+                <View style={styles.decibelStatItem}>
+                  <ThemedText style={styles.decibelStatValue}>{analysis.maxDecibel}</ThemedText>
+                  <ThemedText style={styles.decibelStatLabel}>最大分贝</ThemedText>
+                </View>
+                {analysis.hasSnoring && (
+                  <View style={styles.decibelStatItem}>
+                    <ThemedText style={[styles.decibelStatValue, { color: '#F44336' }]}>
+                      {analysis.avgSnoringDecibel}
+                    </ThemedText>
+                    <ThemedText style={styles.decibelStatLabel}>打鼾均值</ThemedText>
+                  </View>
+                )}
+              </View>
+
               {analysis.hasSnoring && (
                 <View style={styles.tips}>
-                  <ThemedText style={styles.tipsTitle}>建议</ThemedText>
+                  <ThemedText style={styles.tipsTitle}>健康建议</ThemedText>
                   <ThemedText style={styles.tipsText}>
                     {analysis.severity === 'severe'
-                      ? '您的打鼾较为严重，建议咨询医生了解是否存在睡眠呼吸暂停症状。'
+                      ? '您的打鼾较为严重，建议咨询医生了解是否存在睡眠呼吸暂停症状。考虑进行专业的睡眠监测。'
                       : analysis.severity === 'moderate'
-                      ? '您有中度打鼾，建议保持侧卧睡姿，避免睡前饮酒。'
-                      : '您的打鼾较轻，保持良好的睡眠习惯即可。'}
+                      ? '您有中度打鼾，建议保持侧卧睡姿，避免睡前饮酒，保持健康体重。'
+                      : '您的打鼾较轻，保持良好的睡眠习惯即可。建议规律作息，保持适度运动。'}
                   </ThemedText>
                 </View>
               )}
@@ -256,42 +365,101 @@ export default function RecordingDetailScreen() {
                 分析时间: {formatDate(analysis.analyzedAt)}
               </ThemedText>
 
-              <TouchableOpacity
-                style={[styles.reanalyzeButton, { borderColor: '#6C63FF' }]}
-                onPress={handleAnalyze}
-                disabled={isAnalyzing}
-              >
-                {isAnalyzing ? (
-                  <ActivityIndicator size="small" color="#6C63FF" />
-                ) : (
-                  <ThemedText style={[styles.reanalyzeText, { color: '#6C63FF' }]}>
-                    重新分析
-                  </ThemedText>
-                )}
-              </TouchableOpacity>
+              {hasDecibelData && (
+                <TouchableOpacity
+                  style={[styles.reanalyzeButton, { borderColor: '#6C63FF' }]}
+                  onPress={handleAnalyze}
+                  disabled={isAnalyzing}
+                >
+                  {isAnalyzing ? (
+                    <ActivityIndicator size="small" color="#6C63FF" />
+                  ) : (
+                    <ThemedText style={[styles.reanalyzeText, { color: '#6C63FF' }]}>
+                      重新分析
+                    </ThemedText>
+                  )}
+                </TouchableOpacity>
+              )}
             </View>
           ) : (
             <View style={styles.noAnalysis}>
-              <ThemedText style={styles.noAnalysisText}>
-                尚未分析此录音
-              </ThemedText>
-              <TouchableOpacity
-                style={[styles.analyzeButton, { backgroundColor: '#6C63FF' }]}
-                onPress={handleAnalyze}
-                disabled={isAnalyzing}
-                activeOpacity={0.8}
-              >
-                {isAnalyzing ? (
-                  <ActivityIndicator size="small" color="#FFFFFF" />
-                ) : (
-                  <ThemedText style={styles.analyzeButtonText}>
-                    开始分析
+              {hasDecibelData ? (
+                <>
+                  <ThemedText style={styles.noAnalysisText}>
+                    尚未分析此录音
                   </ThemedText>
-                )}
-              </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.analyzeButton, { backgroundColor: '#6C63FF' }]}
+                    onPress={handleAnalyze}
+                    disabled={isAnalyzing}
+                    activeOpacity={0.8}
+                  >
+                    {isAnalyzing ? (
+                      <ActivityIndicator size="small" color="#FFFFFF" />
+                    ) : (
+                      <ThemedText style={styles.analyzeButtonText}>
+                        开始分析
+                      </ThemedText>
+                    )}
+                  </TouchableOpacity>
+                </>
+              ) : (
+                <>
+                  <ThemedText style={styles.noAnalysisText}>
+                    无法分析此录音
+                  </ThemedText>
+                  <ThemedText style={styles.noDataSubtext}>
+                    此录音没有分贝数据，无法进行打鼾分析
+                  </ThemedText>
+                </>
+              )}
             </View>
           )}
         </View>
+
+        {/* Snore Events Timeline */}
+        {analysis && analysis.snoreEvents && analysis.snoreEvents.length > 0 && (
+          <View
+            style={[
+              styles.card,
+              { backgroundColor: isDark ? '#1E1E1E' : '#F8F9FA' },
+            ]}
+          >
+            <ThemedText style={styles.cardTitle}>
+              打鼾事件 ({analysis.snoreEvents.length})
+            </ThemedText>
+            <View style={styles.eventsContainer}>
+              {analysis.snoreEvents.slice(0, 10).map((event, index) => (
+                <View key={index} style={styles.eventItem}>
+                  <View style={styles.eventTime}>
+                    <ThemedText style={styles.eventTimeText}>
+                      {formatDuration(event.startTime)}
+                    </ThemedText>
+                    <ThemedText style={styles.eventDash}>-</ThemedText>
+                    <ThemedText style={styles.eventTimeText}>
+                      {formatDuration(event.endTime)}
+                    </ThemedText>
+                  </View>
+                  <View style={styles.eventDetails}>
+                    <ThemedText style={styles.eventDuration}>
+                      {Math.round((event.endTime - event.startTime) / 1000)}秒
+                    </ThemedText>
+                    <View style={[styles.eventDecibel, { backgroundColor: '#F44336' + '20' }]}>
+                      <ThemedText style={[styles.eventDecibelText, { color: '#F44336' }]}>
+                        {event.maxDecibel}dB
+                      </ThemedText>
+                    </View>
+                  </View>
+                </View>
+              ))}
+              {analysis.snoreEvents.length > 10 && (
+                <ThemedText style={styles.moreEvents}>
+                  还有 {analysis.snoreEvents.length - 10} 个事件...
+                </ThemedText>
+              )}
+            </View>
+          </View>
+        )}
       </ScrollView>
     </ThemedView>
   );
@@ -334,6 +502,45 @@ const styles = StyleSheet.create({
   infoValue: {
     fontSize: 15,
     fontWeight: '600',
+  },
+  noDataContainer: {
+    alignItems: 'center',
+    paddingVertical: 24,
+  },
+  noDataText: {
+    fontSize: 16,
+    opacity: 0.5,
+  },
+  noDataSubtext: {
+    fontSize: 14,
+    opacity: 0.4,
+    marginTop: 8,
+  },
+  chartLegend: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginBottom: 12,
+    gap: 16,
+  },
+  legendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  legendDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    marginRight: 6,
+  },
+  legendLine: {
+    width: 16,
+    height: 3,
+    borderRadius: 1,
+    marginRight: 6,
+  },
+  legendText: {
+    fontSize: 12,
+    opacity: 0.7,
   },
   playbackContainer: {
     flexDirection: 'row',
@@ -403,7 +610,7 @@ const styles = StyleSheet.create({
   analysisStats: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 24,
+    marginBottom: 20,
   },
   statItem: {
     alignItems: 'center',
@@ -422,6 +629,28 @@ const styles = StyleSheet.create({
     width: 1,
     height: 40,
     backgroundColor: 'rgba(128, 128, 128, 0.3)',
+  },
+  decibelStats: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    width: '100%',
+    paddingVertical: 16,
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: 'rgba(128, 128, 128, 0.2)',
+    marginBottom: 20,
+  },
+  decibelStatItem: {
+    alignItems: 'center',
+  },
+  decibelStatValue: {
+    fontSize: 20,
+    fontWeight: '700',
+  },
+  decibelStatLabel: {
+    fontSize: 12,
+    opacity: 0.6,
+    marginTop: 4,
   },
   tips: {
     width: '100%',
@@ -474,5 +703,52 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '700',
+  },
+  eventsContainer: {
+    gap: 8,
+  },
+  eventItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(128, 128, 128, 0.1)',
+  },
+  eventTime: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  eventTimeText: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  eventDash: {
+    marginHorizontal: 4,
+    opacity: 0.5,
+  },
+  eventDetails: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  eventDuration: {
+    fontSize: 14,
+    opacity: 0.6,
+  },
+  eventDecibel: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  eventDecibelText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  moreEvents: {
+    fontSize: 14,
+    opacity: 0.5,
+    textAlign: 'center',
+    marginTop: 8,
   },
 });

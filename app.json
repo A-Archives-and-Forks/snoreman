@@ -10,11 +10,14 @@
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
+      "bundleIdentifier": "com.snoreman.app",
       "infoPlist": {
-        "NSMicrophoneUsageDescription": "需要使用麦克风来录制睡眠时的音频，以分析打鼾情况"
+        "NSMicrophoneUsageDescription": "需要使用麦克风来录制睡眠时的音频，以分析打鼾情况",
+        "UIBackgroundModes": ["audio"]
       }
     },
     "android": {
+      "package": "com.snoreman.app",
       "adaptiveIcon": {
         "backgroundColor": "#6C63FF",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -23,7 +26,12 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "permissions": ["RECORD_AUDIO"]
+      "permissions": [
+        "RECORD_AUDIO",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_MICROPHONE",
+        "WAKE_LOCK"
+      ]
     },
     "web": {
       "output": "static",
@@ -41,6 +49,12 @@
           "dark": {
             "backgroundColor": "#000000"
           }
+        }
+      ],
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "需要使用麦克风来录制睡眠时的音频，以分析打鼾情况"
         }
       ]
     ],

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useState } from 'react';
 import {
   View,
   StyleSheet,
@@ -7,14 +7,15 @@ import {
   Alert,
   Animated,
 } from 'react-native';
-import { Audio } from 'expo-av';
 import { File, Paths } from 'expo-file-system';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { LiveWaveform } from '@/components/decibel-chart';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useRecording } from '@/hooks/use-recording';
 import { Colors } from '@/constants/theme';
 import {
   Recording as RecordingData,
@@ -23,22 +24,58 @@ import {
   deleteRecording,
   formatDuration,
   formatDate,
-  generateId,
+  analyzeDecibelData,
+  SNORE_THRESHOLD_DB,
 } from '@/utils/storage';
-import { getSeverityColor, getSeverityText } from '@/utils/analysis';
+
+function getSeverityColor(severity: string): string {
+  switch (severity) {
+    case 'none':
+      return '#4CAF50';
+    case 'mild':
+      return '#8BC34A';
+    case 'moderate':
+      return '#FF9800';
+    case 'severe':
+      return '#F44336';
+    default:
+      return '#9E9E9E';
+  }
+}
+
+function getSeverityText(severity: string): string {
+  switch (severity) {
+    case 'none':
+      return '无打鼾';
+    case 'mild':
+      return '轻微';
+    case 'moderate':
+      return '中等';
+    case 'severe':
+      return '严重';
+    default:
+      return '未知';
+  }
+}
 
 export default function HomeScreen() {
-  const [isRecording, setIsRecording] = useState(false);
   const [recordings, setRecordings] = useState<RecordingData[]>([]);
-  const [recordingDuration, setRecordingDuration] = useState(0);
-  const recordingRef = useRef<Audio.Recording | null>(null);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const pulseAnim = useRef(new Animated.Value(1)).current;
+  
+  const {
+    isRecording,
+    currentDecibel,
+    decibelData,
+    duration,
+    startRecording,
+    stopRecording,
+    error,
+  } = useRecording();
   
   const router = useRouter();
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   const insets = useSafeAreaInsets();
+  const isDark = colorScheme === 'dark';
 
   const loadRecordings = useCallback(async () => {
     const data = await getRecordings();
@@ -51,95 +88,40 @@ export default function HomeScreen() {
     }, [loadRecordings])
   );
 
-  useEffect(() => {
-    if (isRecording) {
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(pulseAnim, {
-            toValue: 1.2,
-            duration: 1000,
-            useNativeDriver: true,
-          }),
-          Animated.timing(pulseAnim, {
-            toValue: 1,
-            duration: 1000,
-            useNativeDriver: true,
-          }),
-        ])
-      ).start();
-    } else {
-      pulseAnim.setValue(1);
-    }
-  }, [isRecording, pulseAnim]);
-
-  const startRecording = async () => {
-    try {
-      const permission = await Audio.requestPermissionsAsync();
-      if (!permission.granted) {
-        Alert.alert('需要权限', '请允许使用麦克风来录制睡眠音频');
-        return;
-      }
-
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: true,
-        playsInSilentModeIOS: true,
-      });
-
-      const { recording } = await Audio.Recording.createAsync(
-        Audio.RecordingOptionsPresets.HIGH_QUALITY
-      );
-
-      recordingRef.current = recording;
-      setIsRecording(true);
-      setRecordingDuration(0);
-
-      timerRef.current = setInterval(() => {
-        setRecordingDuration((prev) => prev + 1000);
-      }, 1000);
-    } catch (error) {
-      console.error('Failed to start recording:', error);
-      Alert.alert('错误', '无法开始录音');
-    }
+  const handleStartRecording = async () => {
+    await startRecording();
   };
 
-  const stopRecording = async () => {
-    try {
-      if (!recordingRef.current) return;
-
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-        timerRef.current = null;
-      }
-
-      await recordingRef.current.stopAndUnloadAsync();
-      const uri = recordingRef.current.getURI();
-      recordingRef.current = null;
-      setIsRecording(false);
-
-      if (uri) {
-        // Move to permanent storage
-        const fileName = `recording_${Date.now()}.m4a`;
-        const sourceFile = new File(uri);
-        const destFile = new File(Paths.document, fileName);
+  const handleStopRecording = async () => {
+    const result = await stopRecording();
+    
+    if (result) {
+      // 移动文件到永久存储
+      const fileName = `recording_${Date.now()}.m4a`;
+      const sourceFile = new File(result.uri);
+      const destFile = new File(Paths.document, fileName);
+      
+      try {
         sourceFile.move(destFile);
-
+        
+        // 自动分析分贝数据
+        const analysis = analyzeDecibelData(result.decibelData);
+        
         const newRecording: RecordingData = {
-          id: generateId(),
+          id: Date.now().toString(36) + Math.random().toString(36).substr(2),
           uri: destFile.uri,
           createdAt: Date.now(),
-          duration: recordingDuration,
+          duration: duration,
+          decibelData: result.decibelData,
+          analysis,
         };
 
         await saveRecording(newRecording);
         await loadRecordings();
+      } catch (err) {
+        console.error('Failed to save recording:', err);
+        Alert.alert('错误', '无法保存录音');
       }
-
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: false,
-      });
-    } catch (error) {
-      console.error('Failed to stop recording:', error);
-      Alert.alert('错误', '无法保存录音');
     }
   };
 
@@ -157,9 +139,11 @@ export default function HomeScreen() {
     ]);
   };
 
+  const isSnoring = currentDecibel >= SNORE_THRESHOLD_DB;
+
   const renderRecordingItem = ({ item }: { item: RecordingData }) => (
     <TouchableOpacity
-      style={[styles.recordingItem, { backgroundColor: colorScheme === 'dark' ? '#1E1E1E' : '#F8F9FA' }]}
+      style={[styles.recordingItem, { backgroundColor: isDark ? '#1E1E1E' : '#F8F9FA' }]}
       onPress={() => router.push(`/recording/${item.id}` as any)}
       onLongPress={() => handleDelete(item.id)}
     >
@@ -193,16 +177,62 @@ export default function HomeScreen() {
       </View>
 
       {isRecording && (
-        <View style={styles.recordingStatus}>
-          <Animated.View
-            style={[
-              styles.recordingDot,
-              { transform: [{ scale: pulseAnim }] },
-            ]}
-          />
-          <ThemedText style={styles.recordingText}>
-            正在录音 {formatDuration(recordingDuration)}
-          </ThemedText>
+        <View style={[styles.recordingStatus, { backgroundColor: isDark ? '#1E1E1E' : '#F8F9FA' }]}>
+          {/* 实时分贝显示 */}
+          <View style={styles.decibelDisplay}>
+            <View style={styles.decibelHeader}>
+              <View style={[styles.recordingDot, { backgroundColor: isSnoring ? '#F44336' : '#4CAF50' }]} />
+              <ThemedText style={styles.recordingTimeText}>
+                {formatDuration(duration)}
+              </ThemedText>
+            </View>
+            
+            <View style={styles.decibelValueContainer}>
+              <ThemedText style={[styles.decibelValue, { color: isSnoring ? '#F44336' : '#6C63FF' }]}>
+                {Math.round(currentDecibel)}
+              </ThemedText>
+              <ThemedText style={styles.decibelUnit}>dB</ThemedText>
+            </View>
+            
+            {isSnoring && (
+              <View style={styles.snoringAlert}>
+                <ThemedText style={styles.snoringAlertText}>检测到打鼾</ThemedText>
+              </View>
+            )}
+          </View>
+          
+          {/* 实时波形图 */}
+          <View style={styles.waveformContainer}>
+            <LiveWaveform recentData={decibelData} height={50} />
+          </View>
+          
+          {/* 统计信息 */}
+          <View style={styles.statsRow}>
+            <View style={styles.statItem}>
+              <ThemedText style={styles.statValue}>{decibelData.filter(d => d.isSnoring).length}</ThemedText>
+              <ThemedText style={styles.statLabel}>打鼾次数</ThemedText>
+            </View>
+            <View style={styles.statDivider} />
+            <View style={styles.statItem}>
+              <ThemedText style={styles.statValue}>
+                {Math.round(decibelData.length > 0 ? decibelData.reduce((a, b) => a + b.decibel, 0) / decibelData.length : 0)}
+              </ThemedText>
+              <ThemedText style={styles.statLabel}>平均分贝</ThemedText>
+            </View>
+            <View style={styles.statDivider} />
+            <View style={styles.statItem}>
+              <ThemedText style={styles.statValue}>
+                {Math.max(...decibelData.map(d => d.decibel), 0)}
+              </ThemedText>
+              <ThemedText style={styles.statLabel}>最大分贝</ThemedText>
+            </View>
+          </View>
+        </View>
+      )}
+
+      {error && (
+        <View style={styles.errorContainer}>
+          <ThemedText style={styles.errorText}>{error}</ThemedText>
         </View>
       )}
 
@@ -229,7 +259,7 @@ export default function HomeScreen() {
             styles.recordButton,
             isRecording ? styles.recordButtonStop : styles.recordButtonStart,
           ]}
-          onPress={isRecording ? stopRecording : startRecording}
+          onPress={isRecording ? handleStopRecording : handleStartRecording}
           activeOpacity={0.8}
         >
           {isRecording ? (
@@ -268,26 +298,98 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   recordingStatus: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 16,
-    backgroundColor: 'rgba(244, 67, 54, 0.1)',
     marginHorizontal: 24,
     marginVertical: 8,
-    borderRadius: 12,
+    borderRadius: 16,
+    padding: 16,
+  },
+  decibelDisplay: {
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  decibelHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
   },
   recordingDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: '#F44336',
+    width: 10,
+    height: 10,
+    borderRadius: 5,
     marginRight: 8,
   },
-  recordingText: {
-    fontSize: 16,
+  recordingTimeText: {
+    fontSize: 14,
     fontWeight: '600',
+  },
+  decibelValueContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+  },
+  decibelValue: {
+    fontSize: 48,
+    fontWeight: '700',
+    lineHeight: 56,
+  },
+  decibelUnit: {
+    fontSize: 18,
+    fontWeight: '600',
+    marginBottom: 10,
+    marginLeft: 4,
+    opacity: 0.6,
+  },
+  snoringAlert: {
+    backgroundColor: 'rgba(244, 67, 54, 0.15)',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginTop: 4,
+  },
+  snoringAlertText: {
     color: '#F44336',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  waveformContainer: {
+    marginVertical: 12,
+  },
+  statsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(128, 128, 128, 0.2)',
+  },
+  statItem: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  statValue: {
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  statLabel: {
+    fontSize: 12,
+    opacity: 0.6,
+    marginTop: 2,
+  },
+  statDivider: {
+    width: 1,
+    height: 30,
+    backgroundColor: 'rgba(128, 128, 128, 0.2)',
+  },
+  errorContainer: {
+    marginHorizontal: 24,
+    padding: 12,
+    backgroundColor: 'rgba(244, 67, 54, 0.1)',
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  errorText: {
+    color: '#F44336',
+    fontSize: 14,
+    textAlign: 'center',
   },
   listContent: {
     paddingHorizontal: 24,
