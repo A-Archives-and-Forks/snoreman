@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "snoreman",
+    "name": "睡眠呼噜分析",
     "slug": "snoreman",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -9,17 +9,21 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "需要使用麦克风来录制睡眠时的音频，以分析打鼾情况"
+      }
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#6C63FF",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "permissions": ["RECORD_AUDIO"]
     },
     "web": {
       "output": "static",
