@@ -1,11 +1,13 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useState, useRef } from 'react';
 import {
   View,
   StyleSheet,
   TouchableOpacity,
   FlatList,
   Alert,
+  Animated,
 } from 'react-native';
+import { Swipeable } from 'react-native-gesture-handler';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -152,32 +154,68 @@ export default function HomeScreen() {
     ]);
   };
 
+  // 直接删除（用于滑动删除，不需要确认）
+  const handleDirectDelete = async (id: string) => {
+    await deleteRecording(id);
+    await loadRecordings();
+  };
+
   const isSnoring = currentDecibel >= SNORE_THRESHOLD_DB;
 
+  // 渲染滑动删除按钮
+  const renderRightActions = (
+    progress: Animated.AnimatedInterpolation<number>,
+    dragX: Animated.AnimatedInterpolation<number>,
+    itemId: string
+  ) => {
+    const scale = dragX.interpolate({
+      inputRange: [-100, 0],
+      outputRange: [1, 0.5],
+      extrapolate: 'clamp',
+    });
+
+    return (
+      <TouchableOpacity
+        style={styles.deleteAction}
+        onPress={() => handleDirectDelete(itemId)}
+      >
+        <Animated.View style={{ transform: [{ scale }] }}>
+          <ThemedText style={styles.deleteActionText}>删除</ThemedText>
+        </Animated.View>
+      </TouchableOpacity>
+    );
+  };
+
   const renderRecordingItem = ({ item }: { item: RecordingData }) => (
-    <TouchableOpacity
-      style={[styles.recordingItem, { backgroundColor: isDark ? '#1E1E1E' : '#F8F9FA' }]}
-      onPress={() => router.push(`/recording/${item.id}` as any)}
-      onLongPress={() => handleDelete(item.id)}
+    <Swipeable
+      renderRightActions={(progress, dragX) => renderRightActions(progress, dragX, item.id)}
+      rightThreshold={40}
     >
-      <View style={styles.recordingInfo}>
-        <ThemedText style={styles.recordingDate}>{formatDate(item.createdAt)}</ThemedText>
-        <ThemedText style={styles.recordingDuration}>
-          {formatDuration(item.duration)}
-        </ThemedText>
-      </View>
-      {item.analysis ? (
-        <View style={[styles.analysisTag, { backgroundColor: getSeverityColor(item.analysis.severity) }]}>
-          <ThemedText style={styles.analysisTagText}>
-            {getSeverityText(item.analysis.severity)}
+      <TouchableOpacity
+        style={[styles.recordingItem, { backgroundColor: isDark ? '#1E1E1E' : '#F8F9FA' }]}
+        onPress={() => router.push(`/recording/${item.id}` as any)}
+        onLongPress={() => handleDelete(item.id)}
+        activeOpacity={0.7}
+      >
+        <View style={styles.recordingInfo}>
+          <ThemedText style={styles.recordingDate}>{formatDate(item.createdAt)}</ThemedText>
+          <ThemedText style={styles.recordingDuration}>
+            {formatDuration(item.duration)}
           </ThemedText>
         </View>
-      ) : (
-        <View style={[styles.analysisTag, { backgroundColor: '#9E9E9E' }]}>
-          <ThemedText style={styles.analysisTagText}>待分析</ThemedText>
-        </View>
-      )}
-    </TouchableOpacity>
+        {item.analysis ? (
+          <View style={[styles.analysisTag, { backgroundColor: getSeverityColor(item.analysis.severity) }]}>
+            <ThemedText style={styles.analysisTagText}>
+              {getSeverityText(item.analysis.severity)}
+            </ThemedText>
+          </View>
+        ) : (
+          <View style={[styles.analysisTag, { backgroundColor: '#9E9E9E' }]}>
+            <ThemedText style={styles.analysisTagText}>待分析</ThemedText>
+          </View>
+        )}
+      </TouchableOpacity>
+    </Swipeable>
   );
 
   return (
@@ -506,5 +544,19 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginTop: 12,
     opacity: 0.8,
+  },
+  deleteAction: {
+    backgroundColor: '#F44336',
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: 80,
+    height: '100%',
+    borderRadius: 12,
+    marginBottom: 12,
+  },
+  deleteActionText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
   },
 });

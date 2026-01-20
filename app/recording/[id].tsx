@@ -8,7 +8,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
-import { useLocalSearchParams, Stack } from 'expo-router';
+import { useLocalSearchParams, Stack, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
@@ -20,6 +20,7 @@ import {
   Recording,
   getRecording,
   updateRecording,
+  deleteRecording,
   formatDuration,
   formatDate,
   analyzeDecibelData,
@@ -62,6 +63,7 @@ export default function RecordingDetailScreen() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isPlayerReady, setIsPlayerReady] = useState(false);
 
+  const router = useRouter();
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   const insets = useSafeAreaInsets();
@@ -138,6 +140,35 @@ export default function RecordingDetailScreen() {
     } finally {
       setIsAnalyzing(false);
     }
+  };
+
+  const handleDelete = () => {
+    if (!recording) return;
+    
+    Alert.alert('删除录音', '确定要删除这条录音吗？此操作无法撤销。', [
+      { text: '取消', style: 'cancel' },
+      {
+        text: '删除',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            // 先暂停播放
+            if (isPlayerReady) {
+              try {
+                player.pause();
+              } catch (e) {
+                // 忽略错误
+              }
+            }
+            await deleteRecording(recording.id);
+            router.back();
+          } catch (error) {
+            console.error('Delete error:', error);
+            Alert.alert('错误', '删除失败，请重试');
+          }
+        },
+      },
+    ]);
   };
 
   if (!recording) {
@@ -460,6 +491,15 @@ export default function RecordingDetailScreen() {
             </View>
           </View>
         )}
+
+        {/* Delete Button */}
+        <TouchableOpacity
+          style={styles.deleteButton}
+          onPress={handleDelete}
+          activeOpacity={0.8}
+        >
+          <ThemedText style={styles.deleteButtonText}>删除录音</ThemedText>
+        </TouchableOpacity>
       </ScrollView>
     </ThemedView>
   );
@@ -750,5 +790,19 @@ const styles = StyleSheet.create({
     opacity: 0.5,
     textAlign: 'center',
     marginTop: 8,
+  },
+  deleteButton: {
+    backgroundColor: 'rgba(244, 67, 54, 0.1)',
+    paddingVertical: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: '#F44336',
+  },
+  deleteButtonText: {
+    color: '#F44336',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });
