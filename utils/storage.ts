@@ -15,6 +15,7 @@ export interface Recording {
   duration: number; // in milliseconds
   decibelData: DecibelDataPoint[]; // 分贝数据
   analysis?: SnoreAnalysis;
+  threshold?: number; // 打鼾阈值
 }
 
 export interface SnoreAnalysis {
@@ -42,6 +43,7 @@ export const MIN_SNORE_DURATION_MS = 1000;
 
 const RECORDINGS_KEY = 'sleep_recordings';
 const CURRENT_RECORDING_KEY = 'current_recording_data';
+const SNORE_THRESHOLD_KEY = 'snore_threshold';
 
 export async function getRecordings(): Promise<Recording[]> {
   try {
@@ -294,4 +296,35 @@ export function formatDate(timestamp: number): string {
 
 export function generateId(): string {
   return Date.now().toString(36) + Math.random().toString(36).substr(2);
+}
+
+// 保存打鼾阈值设置
+export async function saveSnoreThreshold(threshold: number): Promise<void> {
+  try {
+    console.log('saveSnoreThreshold called with:', threshold);
+    await AsyncStorage.setItem(SNORE_THRESHOLD_KEY, threshold.toString());
+    console.log('Threshold saved successfully');
+  } catch (error) {
+    console.error('Failed to save snore threshold:', error);
+  }
+}
+
+// 获取打鼾阈值设置
+export async function getSnoreThreshold(): Promise<number> {
+  try {
+    const value = await AsyncStorage.getItem(SNORE_THRESHOLD_KEY);
+    console.log('getSnoreThreshold raw value:', value);
+    if (value !== null) {
+      const threshold = parseInt(value, 10);
+      if (!isNaN(threshold)) {
+        console.log('getSnoreThreshold returning:', threshold);
+        return threshold;
+      }
+    }
+    console.log('getSnoreThreshold returning default:', SNORE_THRESHOLD_DB);
+    return SNORE_THRESHOLD_DB; // 返回默认值
+  } catch (error) {
+    console.error('Failed to get snore threshold:', error);
+    return SNORE_THRESHOLD_DB;
+  }
 }

@@ -1,4 +1,4 @@
-import { useCallback, useState, useRef } from 'react';
+import { useCallback, useState, useRef, useEffect } from 'react';
 import {
   View,
   StyleSheet,
@@ -27,6 +27,8 @@ import {
   formatDate,
   analyzeDecibelData,
   SNORE_THRESHOLD_DB,
+  getSnoreThreshold,
+  saveSnoreThreshold,
 } from '@/utils/storage';
 
 function getSeverityColor(severity: string): string {
@@ -84,6 +86,16 @@ export default function HomeScreen() {
     setRecordings(data);
   }, []);
 
+  // 组件首次挂载时加载保存的阈值设置
+  useEffect(() => {
+    const loadThreshold = async () => {
+      const savedThreshold = await getSnoreThreshold();
+      console.log('Loaded threshold:', savedThreshold);
+      setThreshold(savedThreshold);
+    };
+    loadThreshold();
+  }, []);
+
   useFocusEffect(
     useCallback(() => {
       loadRecordings();
@@ -125,6 +137,7 @@ export default function HomeScreen() {
           duration: recordingDuration > 0 ? recordingDuration : 1000,
           decibelData: result.decibelData,
           analysis,
+          threshold, // 保存当前阈值
         };
 
         console.log('Saving recording:', newRecording.id);
@@ -275,6 +288,10 @@ export default function HomeScreen() {
               step={1}
               value={threshold}
               onValueChange={setThreshold}
+              onSlidingComplete={(value) => {
+                console.log('Saving threshold:', value);
+                saveSnoreThreshold(value);
+              }}
               minimumTrackTintColor="#6C63FF"
               maximumTrackTintColor={isDark ? '#333' : '#E0E0E0'}
               thumbTintColor="#6C63FF"
@@ -364,10 +381,11 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingHorizontal: 24,
-    paddingTop: 16,
-    paddingBottom: 8,
+    paddingTop: 36,
+    paddingBottom: 30,
   },
   title: {
+    paddingTop: 12,
     fontSize: 32,
     fontWeight: '700',
   },

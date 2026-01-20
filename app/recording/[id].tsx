@@ -127,6 +127,10 @@ export default function RecordingDetailScreen() {
     if (id) {
       const data = await getRecording(id);
       setRecording(data);
+      // 加载录音保存的阈值，如果没有则使用默认值
+      if (data?.threshold !== undefined) {
+        setThreshold(data.threshold);
+      }
     }
   }, [id]);
 
@@ -339,6 +343,18 @@ export default function RecordingDetailScreen() {
                 step={1}
                 value={threshold}
                 onValueChange={setThreshold}
+                onSlidingComplete={async (value) => {
+                  if (recording) {
+                    // 使用新阈值重新分析数据
+                    const newAnalysis = analyzeDecibelData(recording.decibelData, value);
+                    await updateRecording(recording.id, { 
+                      threshold: value,
+                      analysis: newAnalysis,
+                    });
+                    // 重新加载以更新显示
+                    await loadRecording();
+                  }
+                }}
                 minimumTrackTintColor="#6C63FF"
                 maximumTrackTintColor={isDark ? '#333' : '#E0E0E0'}
                 thumbTintColor="#6C63FF"
