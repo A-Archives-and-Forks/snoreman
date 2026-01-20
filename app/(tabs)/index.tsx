@@ -5,9 +5,7 @@ import {
   TouchableOpacity,
   FlatList,
   Alert,
-  Animated,
 } from 'react-native';
-import { File, Paths } from 'expo-file-system';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -93,35 +91,50 @@ export default function HomeScreen() {
   };
 
   const handleStopRecording = async () => {
-    const result = await stopRecording();
+    console.log('handleStopRecording called, duration:', duration);
     
-    if (result) {
-      // 移动文件到永久存储
-      const fileName = `recording_${Date.now()}.m4a`;
-      const sourceFile = new File(result.uri);
-      const destFile = new File(Paths.document, fileName);
+    try {
+      const result = await stopRecording();
+      console.log('stopRecording result:', result);
       
-      try {
-        sourceFile.move(destFile);
+      if (result && result.uri) {
+        // 保存当前 duration，因为 stopRecording 后 hook 的 duration 会被重置
+        const recordingDuration = duration;
+        
+        // recorder.uri 返回的是完整的 file:// URI
+        // 直接使用原始 URI，因为：
+        // 1. expo-audio 的录音文件会保存在 app 的 cache 目录
+        // 2. cache 目录的文件在 app 存活期间是持久的
+        // 3. 复制文件可能因为各种原因失败，但原始文件是可用的
+        let finalUri = result.uri;
+        
+        console.log('Recording URI:', finalUri);
         
         // 自动分析分贝数据
         const analysis = analyzeDecibelData(result.decibelData);
+        console.log('Analysis result:', analysis);
         
         const newRecording: RecordingData = {
           id: Date.now().toString(36) + Math.random().toString(36).substr(2),
-          uri: destFile.uri,
+          uri: finalUri,
           createdAt: Date.now(),
-          duration: duration,
+          duration: recordingDuration > 0 ? recordingDuration : 1000,
           decibelData: result.decibelData,
           analysis,
         };
 
+        console.log('Saving recording:', newRecording.id);
         await saveRecording(newRecording);
+        console.log('Recording saved, reloading list');
         await loadRecordings();
-      } catch (err) {
-        console.error('Failed to save recording:', err);
-        Alert.alert('错误', '无法保存录音');
+        console.log('List reloaded');
+      } else {
+        console.log('No result from stopRecording');
+        Alert.alert('提示', '录音数据为空');
       }
+    } catch (err) {
+      console.error('Failed to save recording:', err);
+      Alert.alert('错误', '无法保存录音: ' + (err as Error).message);
     }
   };
 
