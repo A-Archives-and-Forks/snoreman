@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import {
   View,
   StyleSheet,
@@ -7,6 +7,7 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
+import Slider from '@react-native-community/slider';
 import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import { useLocalSearchParams, Stack, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -18,6 +19,7 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { Colors } from '@/constants/theme';
 import {
   Recording,
+  SnoreEvent,
   getRecording,
   updateRecording,
   deleteRecording,
@@ -25,6 +27,7 @@ import {
   formatDate,
   analyzeDecibelData,
   SNORE_THRESHOLD_DB,
+  MIN_SNORE_DURATION_MS,
 } from '@/utils/storage';
 
 function getSeverityColor(severity: string): string {
@@ -62,6 +65,7 @@ export default function RecordingDetailScreen() {
   const [recording, setRecording] = useState<Recording | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isPlayerReady, setIsPlayerReady] = useState(false);
+  const [threshold, setThreshold] = useState(SNORE_THRESHOLD_DB);
 
   const router = useRouter();
   const colorScheme = useColorScheme();
@@ -72,6 +76,52 @@ export default function RecordingDetailScreen() {
   // 音频播放器 - 只在有录音 URI 时初始化
   const player = useAudioPlayer(recording?.uri ? { uri: recording.uri } : null);
   const status = useAudioPlayerStatus(player);
+
+  // 基于当前阈值动态计算打鼾事件
+  const dynamicSnoreEvents = useMemo(() => {
+    if (!recording?.decibelData || recording.decibelData.length === 0) return [];
+    
+    const events: SnoreEvent[] = [];
+    let currentEvent: { startTime: number; maxDecibel: number } | null = null;
+    
+    for (const point of recording.decibelData) {
+      const isAboveThreshold = point.decibel >= threshold;
+      if (isAboveThreshold) {
+        if (!currentEvent) {
+          currentEvent = { startTime: point.timestamp, maxDecibel: point.decibel };
+        } else {
+          currentEvent.maxDecibel = Math.max(currentEvent.maxDecibel, point.decibel);
+        }
+      } else {
+        if (currentEvent) {
+          const duration = point.timestamp - currentEvent.startTime;
+          if (duration >= MIN_SNORE_DURATION_MS) {
+            events.push({
+              startTime: currentEvent.startTime,
+              endTime: point.timestamp,
+              maxDecibel: currentEvent.maxDecibel,
+            });
+          }
+          currentEvent = null;
+        }
+      }
+    }
+    
+    // 处理最后一个事件
+    if (currentEvent && recording.decibelData.length > 0) {
+      const lastPoint = recording.decibelData[recording.decibelData.length - 1];
+      const duration = lastPoint.timestamp - currentEvent.startTime;
+      if (duration >= MIN_SNORE_DURATION_MS) {
+        events.push({
+          startTime: currentEvent.startTime,
+          endTime: lastPoint.timestamp,
+          maxDecibel: currentEvent.maxDecibel,
+        });
+      }
+    }
+    
+    return events;
+  }, [recording?.decibelData, threshold]);
 
   const loadRecording = useCallback(async () => {
     if (id) {
@@ -117,6 +167,19 @@ export default function RecordingDetailScreen() {
       }
     } catch (e) {
       console.error('Playback error:', e);
+    }
+  };
+
+  // 跳转到指定时间点并播放
+  const handleSeekToEvent = async (event: SnoreEvent) => {
+    if (!isPlayerReady) return;
+    try {
+      // 跳转到事件开始时间前0.5秒，确保能听到完整打鼾声
+      const seekTime = Math.max(0, event.startTime / 1000 - 0.5);
+      await player.seekTo(seekTime);
+      player.play();
+    } catch (e) {
+      console.error('Seek error:', e);
     }
   };
 
@@ -244,7 +307,7 @@ export default function RecordingDetailScreen() {
               </View>
               <View style={styles.legendItem}>
                 <View style={[styles.legendDot, { backgroundColor: '#F44336' }]} />
-                <ThemedText style={styles.legendText}>打鼾 ({'>='}{SNORE_THRESHOLD_DB}dB)</ThemedText>
+                <ThemedText style={styles.legendText}>超阈值 ({'>='}{threshold}dB)</ThemedText>
               </View>
               <View style={styles.legendItem}>
                 <View style={[styles.legendLine, { backgroundColor: '#FF9800' }]} />
@@ -253,12 +316,45 @@ export default function RecordingDetailScreen() {
             </View>
             <DecibelChart
               data={decibelData}
-              snoreEvents={analysis?.snoreEvents}
+              snoreEvents={dynamicSnoreEvents}
               height={150}
               showThreshold={true}
               highlightSnoring={true}
               currentPosition={status?.playing ? playbackPosition : undefined}
+              threshold={threshold}
+              onSnoreEventPress={handleSeekToEvent}
             />
+            <ThemedText style={styles.chartHint}>点击红色区域可跳转播放</ThemedText>
+
+            {/* 阈值调节 */}
+            <View style={styles.thresholdContainer}>
+              <View style={styles.thresholdHeader}>
+                <ThemedText style={styles.thresholdLabel}>打鼾阈值</ThemedText>
+                <ThemedText style={styles.thresholdValue}>{threshold} dB</ThemedText>
+              </View>
+              <Slider
+                style={styles.slider}
+                minimumValue={20}
+                maximumValue={80}
+                step={1}
+                value={threshold}
+                onValueChange={setThreshold}
+                minimumTrackTintColor="#6C63FF"
+                maximumTrackTintColor={isDark ? '#333' : '#E0E0E0'}
+                thumbTintColor="#6C63FF"
+              />
+              <View style={styles.thresholdHints}>
+                <ThemedText style={styles.thresholdHint}>安静 20</ThemedText>
+                <ThemedText style={styles.thresholdHint}>80 嘈杂</ThemedText>
+              </View>
+            </View>
+
+            {/* 动态统计 */}
+            <View style={styles.dynamicStats}>
+              <ThemedText style={styles.dynamicStatsText}>
+                当前阈值下检测到 <ThemedText style={styles.dynamicStatsHighlight}>{dynamicSnoreEvents.length}</ThemedText> 次打鼾事件
+              </ThemedText>
+            </View>
           </View>
         ) : (
           <View
@@ -448,8 +544,8 @@ export default function RecordingDetailScreen() {
           )}
         </View>
 
-        {/* Snore Events Timeline */}
-        {analysis && analysis.snoreEvents && analysis.snoreEvents.length > 0 && (
+        {/* Snore Events Timeline - 使用动态计算的事件 */}
+        {dynamicSnoreEvents.length > 0 && (
           <View
             style={[
               styles.card,
@@ -457,11 +553,17 @@ export default function RecordingDetailScreen() {
             ]}
           >
             <ThemedText style={styles.cardTitle}>
-              打鼾事件 ({analysis.snoreEvents.length})
+              打鼾事件 ({dynamicSnoreEvents.length})
             </ThemedText>
+            <ThemedText style={styles.eventsHint}>点击事件可跳转播放</ThemedText>
             <View style={styles.eventsContainer}>
-              {analysis.snoreEvents.slice(0, 10).map((event, index) => (
-                <View key={index} style={styles.eventItem}>
+              {dynamicSnoreEvents.slice(0, 10).map((event, index) => (
+                <TouchableOpacity 
+                  key={index} 
+                  style={styles.eventItem}
+                  onPress={() => handleSeekToEvent(event)}
+                  activeOpacity={0.7}
+                >
                   <View style={styles.eventTime}>
                     <ThemedText style={styles.eventTimeText}>
                       {formatDuration(event.startTime)}
@@ -480,12 +582,15 @@ export default function RecordingDetailScreen() {
                         {event.maxDecibel}dB
                       </ThemedText>
                     </View>
+                    <View style={styles.eventPlayIcon}>
+                      <ThemedText style={styles.eventPlayIconText}>▶</ThemedText>
+                    </View>
                   </View>
-                </View>
+                </TouchableOpacity>
               ))}
-              {analysis.snoreEvents.length > 10 && (
+              {dynamicSnoreEvents.length > 10 && (
                 <ThemedText style={styles.moreEvents}>
-                  还有 {analysis.snoreEvents.length - 10} 个事件...
+                  还有 {dynamicSnoreEvents.length - 10} 个事件...
                 </ThemedText>
               )}
             </View>
@@ -804,5 +909,77 @@ const styles = StyleSheet.create({
     color: '#F44336',
     fontSize: 16,
     fontWeight: '600',
+  },
+  chartHint: {
+    fontSize: 12,
+    opacity: 0.5,
+    textAlign: 'center',
+    marginTop: 8,
+  },
+  thresholdContainer: {
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(128, 128, 128, 0.2)',
+  },
+  thresholdHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  thresholdLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  thresholdValue: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#6C63FF',
+  },
+  slider: {
+    width: '100%',
+    height: 40,
+  },
+  thresholdHints: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: -8,
+  },
+  thresholdHint: {
+    fontSize: 12,
+    opacity: 0.5,
+  },
+  dynamicStats: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(128, 128, 128, 0.2)',
+    alignItems: 'center',
+  },
+  dynamicStatsText: {
+    fontSize: 14,
+    opacity: 0.8,
+  },
+  dynamicStatsHighlight: {
+    fontWeight: '700',
+    color: '#F44336',
+  },
+  eventsHint: {
+    fontSize: 12,
+    opacity: 0.5,
+    marginBottom: 12,
+  },
+  eventPlayIcon: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: 'rgba(108, 99, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  eventPlayIconText: {
+    fontSize: 10,
+    color: '#6C63FF',
   },
 });

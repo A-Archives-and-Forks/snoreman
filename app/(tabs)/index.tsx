@@ -7,6 +7,7 @@ import {
   Alert,
   Animated,
 } from 'react-native';
+import Slider from '@react-native-community/slider';
 import { Swipeable } from 'react-native-gesture-handler';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -60,6 +61,7 @@ function getSeverityText(severity: string): string {
 
 export default function HomeScreen() {
   const [recordings, setRecordings] = useState<RecordingData[]>([]);
+  const [threshold, setThreshold] = useState(SNORE_THRESHOLD_DB);
   
   const {
     isRecording,
@@ -112,8 +114,8 @@ export default function HomeScreen() {
         
         console.log('Recording URI:', finalUri);
         
-        // 自动分析分贝数据
-        const analysis = analyzeDecibelData(result.decibelData);
+        // 使用当前阈值分析分贝数据
+        const analysis = analyzeDecibelData(result.decibelData, threshold);
         console.log('Analysis result:', analysis);
         
         const newRecording: RecordingData = {
@@ -160,7 +162,10 @@ export default function HomeScreen() {
     await loadRecordings();
   };
 
-  const isSnoring = currentDecibel >= SNORE_THRESHOLD_DB;
+  const isSnoring = currentDecibel >= threshold;
+
+  // 计算基于当前阈值的打鼾次数
+  const snoringCount = decibelData.filter(d => d.decibel >= threshold).length;
 
   // 渲染滑动删除按钮
   const renderRightActions = (
@@ -254,14 +259,37 @@ export default function HomeScreen() {
           
           {/* 实时波形图 */}
           <View style={styles.waveformContainer}>
-            <LiveWaveform recentData={decibelData} height={50} />
+            <LiveWaveform recentData={decibelData} height={50} threshold={threshold} />
+          </View>
+
+          {/* 阈值调节 */}
+          <View style={styles.thresholdContainer}>
+            <View style={styles.thresholdHeader}>
+              <ThemedText style={styles.thresholdLabel}>打鼾阈值</ThemedText>
+              <ThemedText style={styles.thresholdValue}>{threshold} dB</ThemedText>
+            </View>
+            <Slider
+              style={styles.slider}
+              minimumValue={20}
+              maximumValue={80}
+              step={1}
+              value={threshold}
+              onValueChange={setThreshold}
+              minimumTrackTintColor="#6C63FF"
+              maximumTrackTintColor={isDark ? '#333' : '#E0E0E0'}
+              thumbTintColor="#6C63FF"
+            />
+            <View style={styles.thresholdHints}>
+              <ThemedText style={styles.thresholdHint}>安静 20</ThemedText>
+              <ThemedText style={styles.thresholdHint}>80 嘈杂</ThemedText>
+            </View>
           </View>
           
           {/* 统计信息 */}
           <View style={styles.statsRow}>
             <View style={styles.statItem}>
-              <ThemedText style={styles.statValue}>{decibelData.filter(d => d.isSnoring).length}</ThemedText>
-              <ThemedText style={styles.statLabel}>打鼾次数</ThemedText>
+              <ThemedText style={styles.statValue}>{snoringCount}</ThemedText>
+              <ThemedText style={styles.statLabel}>超阈值次数</ThemedText>
             </View>
             <View style={styles.statDivider} />
             <View style={styles.statItem}>
@@ -558,5 +586,39 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '600',
+  },
+  thresholdContainer: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(128, 128, 128, 0.2)',
+  },
+  thresholdHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  thresholdLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  thresholdValue: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#6C63FF',
+  },
+  slider: {
+    width: '100%',
+    height: 40,
+  },
+  thresholdHints: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: -8,
+  },
+  thresholdHint: {
+    fontSize: 12,
+    opacity: 0.5,
   },
 });

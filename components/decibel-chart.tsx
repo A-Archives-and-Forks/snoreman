@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { View, StyleSheet, Dimensions } from 'react-native';
+import { View, StyleSheet, Dimensions, TouchableOpacity } from 'react-native';
 import { DecibelDataPoint, SNORE_THRESHOLD_DB, SnoreEvent } from '@/utils/storage';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
@@ -11,6 +11,8 @@ interface DecibelChartProps {
   showThreshold?: boolean;
   highlightSnoring?: boolean;
   currentPosition?: number; // 当前播放位置（毫秒）
+  threshold?: number; // 自定义阈值
+  onSnoreEventPress?: (event: SnoreEvent) => void; // 点击打鼾事件回调
 }
 
 const DEFAULT_WIDTH = Dimensions.get('window').width - 48;
@@ -24,6 +26,8 @@ export function DecibelChart({
   showThreshold = true,
   highlightSnoring = true,
   currentPosition,
+  threshold = SNORE_THRESHOLD_DB,
+  onSnoreEventPress,
 }: DecibelChartProps) {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
@@ -33,19 +37,19 @@ export function DecibelChart({
     if (data.length === 0) return { points: [], maxTime: 0 };
 
     const maxTime = data[data.length - 1].timestamp;
-    const maxDecibel = Math.max(...data.map(d => d.decibel), SNORE_THRESHOLD_DB + 10);
+    const maxDecibel = Math.max(...data.map(d => d.decibel), threshold + 10);
     
     // 将数据点转换为坐标
     const points = data.map((point) => ({
       x: (point.timestamp / maxTime) * width,
       y: height - (point.decibel / maxDecibel) * height * 0.9 - height * 0.05,
       decibel: point.decibel,
-      isSnoring: point.isSnoring,
+      isAboveThreshold: point.decibel >= threshold,
       timestamp: point.timestamp,
     }));
 
     return { points, maxTime, maxDecibel };
-  }, [data, width, height]);
+  }, [data, width, height, threshold]);
 
   // 生成 SVG 路径
   const pathData = useMemo(() => {
@@ -64,8 +68,8 @@ export function DecibelChart({
   // 阈值线位置
   const thresholdY = useMemo(() => {
     if (!chartData.maxDecibel) return height * 0.5;
-    return height - (SNORE_THRESHOLD_DB / chartData.maxDecibel) * height * 0.9 - height * 0.05;
-  }, [chartData.maxDecibel, height]);
+    return height - (threshold / chartData.maxDecibel) * height * 0.9 - height * 0.05;
+  }, [chartData.maxDecibel, height, threshold]);
 
   // 打鼾区域
   const snoreRegions = useMemo(() => {
@@ -73,7 +77,8 @@ export function DecibelChart({
     
     return snoreEvents.map((event) => ({
       x: (event.startTime / chartData.maxTime) * width,
-      width: ((event.endTime - event.startTime) / chartData.maxTime) * width,
+      width: Math.max(8, ((event.endTime - event.startTime) / chartData.maxTime) * width),
+      event,
     }));
   }, [snoreEvents, chartData.maxTime, width, highlightSnoring]);
 
@@ -108,9 +113,9 @@ export function DecibelChart({
         ))}
       </View>
 
-      {/* 打鼾高亮区域 */}
+      {/* 打鼾高亮区域（可点击） */}
       {snoreRegions.map((region, index) => (
-        <View
+        <TouchableOpacity
           key={index}
           style={[
             styles.snoreRegion,
@@ -121,6 +126,8 @@ export function DecibelChart({
               backgroundColor: 'rgba(244, 67, 54, 0.15)',
             },
           ]}
+          onPress={() => onSnoreEventPress?.(region.event)}
+          activeOpacity={onSnoreEventPress ? 0.6 : 1}
         />
       ))}
 
@@ -150,10 +157,10 @@ export function DecibelChart({
                   left: point.x - 1,
                   height: barHeight,
                   bottom: height * 0.05,
-                  backgroundColor: point.isSnoring 
+                  backgroundColor: point.isAboveThreshold 
                     ? '#F44336' 
                     : (isDark ? '#6C63FF' : '#6C63FF'),
-                  opacity: point.isSnoring ? 1 : 0.7,
+                  opacity: point.isAboveThreshold ? 1 : 0.7,
                 },
               ]}
             />
@@ -258,9 +265,10 @@ interface LiveWaveformProps {
   recentData: DecibelDataPoint[];
   width?: number;
   height?: number;
+  threshold?: number;
 }
 
-export function LiveWaveform({ recentData, width = DEFAULT_WIDTH, height = 60 }: LiveWaveformProps) {
+export function LiveWaveform({ recentData, width = DEFAULT_WIDTH, height = 60, threshold = SNORE_THRESHOLD_DB }: LiveWaveformProps) {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
   
@@ -272,6 +280,7 @@ export function LiveWaveform({ recentData, width = DEFAULT_WIDTH, height = 60 }:
     <View style={[styles.liveWaveform, { width, height, backgroundColor: isDark ? '#1A1A1A' : '#F8F9FA' }]}>
       {displayData.map((point, index) => {
         const barHeight = Math.max(4, (point.decibel / 100) * height * 0.9);
+        const isAboveThreshold = point.decibel >= threshold;
         return (
           <View
             key={index}
@@ -280,7 +289,7 @@ export function LiveWaveform({ recentData, width = DEFAULT_WIDTH, height = 60 }:
               {
                 width: barWidth - 2,
                 height: barHeight,
-                backgroundColor: point.isSnoring ? '#F44336' : '#6C63FF',
+                backgroundColor: isAboveThreshold ? '#F44336' : '#6C63FF',
                 opacity: 0.3 + (index / displayData.length) * 0.7,
               },
             ]}

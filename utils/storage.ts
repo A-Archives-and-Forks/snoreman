@@ -158,7 +158,7 @@ export async function clearCurrentRecordingData(): Promise<void> {
 }
 
 // 分析分贝数据，识别打鼾事件
-export function analyzeDecibelData(decibelData: DecibelDataPoint[]): SnoreAnalysis {
+export function analyzeDecibelData(decibelData: DecibelDataPoint[], threshold: number = SNORE_THRESHOLD_DB): SnoreAnalysis {
   if (decibelData.length === 0) {
     return {
       hasSnoring: false,
@@ -178,12 +178,13 @@ export function analyzeDecibelData(decibelData: DecibelDataPoint[]): SnoreAnalys
   const maxDecibel = Math.max(...decibels);
   const avgDecibel = decibels.reduce((a, b) => a + b, 0) / decibels.length;
 
-  // 识别打鼾事件
+  // 识别打鼾事件（使用传入的阈值）
   const snoreEvents: SnoreEvent[] = [];
   let currentEvent: { startTime: number; maxDecibel: number } | null = null;
 
   for (const point of decibelData) {
-    if (point.isSnoring) {
+    const isAboveThreshold = point.decibel >= threshold;
+    if (isAboveThreshold) {
       if (!currentEvent) {
         currentEvent = { startTime: point.timestamp, maxDecibel: point.decibel };
       } else {
@@ -217,9 +218,9 @@ export function analyzeDecibelData(decibelData: DecibelDataPoint[]): SnoreAnalys
     }
   }
 
-  // 计算打鼾统计
+  // 计算打鼾统计（使用传入的阈值）
   const snoreDuration = snoreEvents.reduce((acc, event) => acc + (event.endTime - event.startTime), 0) / 1000;
-  const snoringPoints = decibelData.filter(d => d.isSnoring);
+  const snoringPoints = decibelData.filter(d => d.decibel >= threshold);
   const avgSnoringDecibel = snoringPoints.length > 0
     ? snoringPoints.reduce((a, b) => a + b.decibel, 0) / snoringPoints.length
     : 0;
