@@ -11,6 +11,7 @@ import Slider from '@react-native-community/slider';
 import { useAudioPlayer, useAudioPlayerStatus, AudioModule } from 'expo-audio';
 import { useLocalSearchParams, Stack, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as Sharing from 'expo-sharing';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -241,6 +242,34 @@ export default function RecordingDetailScreen() {
         },
       },
     ]);
+  };
+
+  const handleExport = async () => {
+    if (!recording) return;
+
+    try {
+      // 检查分享功能是否可用
+      const isAvailable = await Sharing.isAvailableAsync();
+      if (!isAvailable) {
+        Alert.alert('提示', '当前设备不支持分享功能');
+        return;
+      }
+
+      // 先暂停播放
+      if (isPlayerReady && status?.playing) {
+        player.pause();
+      }
+
+      // 分享录音文件
+      await Sharing.shareAsync(recording.uri, {
+        mimeType: 'audio/m4a',
+        dialogTitle: '导出录音',
+        UTI: 'public.audio',
+      });
+    } catch (error) {
+      console.error('Export error:', error);
+      Alert.alert('错误', '导出失败，请重试');
+    }
   };
 
   if (!recording) {
@@ -628,6 +657,15 @@ export default function RecordingDetailScreen() {
         >
           <ThemedText style={styles.deleteButtonText}>删除录音</ThemedText>
         </TouchableOpacity>
+
+        {/* Export Button */}
+        <TouchableOpacity
+          style={styles.exportButton}
+          onPress={handleExport}
+          activeOpacity={0.8}
+        >
+          <ThemedText style={styles.exportButtonText}>导出录音</ThemedText>
+        </TouchableOpacity>
       </ScrollView>
     </ThemedView>
   );
@@ -930,6 +968,20 @@ const styles = StyleSheet.create({
   },
   deleteButtonText: {
     color: '#F44336',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  exportButton: {
+    backgroundColor: 'rgba(108, 99, 255, 0.1)',
+    paddingVertical: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: '#6C63FF',
+  },
+  exportButtonText: {
+    color: '#6C63FF',
     fontSize: 16,
     fontWeight: '600',
   },

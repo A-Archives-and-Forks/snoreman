@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useAudioRecorder, useAudioRecorderState, AudioModule, RecordingOptions } from 'expo-audio';
 import { AppState, AppStateStatus } from 'react-native';
+import * as FileSystem from 'expo-file-system/legacy';
 import {
   DecibelDataPoint,
   SNORE_THRESHOLD_DB,
@@ -87,10 +88,29 @@ export function useRecording(): UseRecordingResult {
   const totalDataPointsRef = useRef<number>(0); // 总数据点数
 
   // 将 metering 值转换为分贝 (0-100 范围)
+  // iOS metering 范围: -160 (静音) 到 0 (最大)
+  // 实际使用中，安静环境通常在 -60 到 -40 dB，打鼾通常在 -30 到 -10 dB
+  // 我们将 -60dB 以下视为静音（底噪），-60 到 0 映射到 0-100
   const meteringToDecibel = useCallback((metering: number | undefined): number => {
     if (metering === undefined || metering === null) return 0;
-    const normalized = Math.max(0, metering + 160);
-    return Math.round(normalized * 100 / 160);
+    
+    // 底噪阈值：低于 -60dB 视为静音/底噪
+    const noiseFloor = -60;
+    // 最大值
+    const maxLevel = 0;
+    
+    // 如果低于底噪阈值，返回很低的值
+    if (metering < noiseFloor) {
+      // -160 到 -60 映射到 0-20 的范围（表示底噪）
+      const noiseRange = metering - (-160);
+      return Math.round(Math.max(0, noiseRange * 20 / 100));
+    }
+    
+    // -60 到 0 映射到 20-100 的范围
+    const normalizedRange = metering - noiseFloor; // 0 到 60
+    const scaledValue = 20 + (normalizedRange * 80 / 60);
+    
+    return Math.round(Math.min(100, Math.max(0, scaledValue)));
   }, []);
 
   // 将待写入数据保存到存储
@@ -110,16 +130,10 @@ export function useRecording(): UseRecordingResult {
         try {
           const status = recorder.getStatus();
           
-          let decibel: number;
           const metering = status.metering;
-          
-          if (metering !== undefined && metering !== null && metering !== 0) {
-            decibel = meteringToDecibel(metering);
-          } else {
-            const baseDecibel = 25 + Math.random() * 30;
-            decibel = Math.random() < 0.1 ? baseDecibel + 25 : baseDecibel;
-            decibel = Math.round(Math.min(100, decibel));
-          }
+          // 直接使用真实的 metering 值，不再使用假数据
+          // metering 为 undefined/null 时视为静音
+          const decibel = meteringToDecibel(metering);
           
           const timestamp = Date.now() - startTimeRef.current;
           const isSnoring = decibel >= SNORE_THRESHOLD_DB;
@@ -196,13 +210,30 @@ export function useRecording(): UseRecordingResult {
       
       // 停止当前录音
       await recorder.stop();
-      const uri = recorder.uri;
+      const tempUri = recorder.uri;
       
-      if (uri && recordingIdRef.current) {
+      if (tempUri && recordingIdRef.current) {
+        // 将临时文件复制到永久位置
+        const segmentId = generateId();
+        const uniqueFileName = `segment_${recordingIdRef.current}_${segmentId}.m4a`;
+        const destPath = `${FileSystem.documentDirectory}${uniqueFileName}`;
+        
+        let finalUri = tempUri;
+        try {
+          const fileInfo = await FileSystem.getInfoAsync(tempUri);
+          if (fileInfo.exists) {
+            await FileSystem.copyAsync({ from: tempUri, to: destPath });
+            finalUri = destPath;
+            console.log('Segment copied to:', finalUri);
+          }
+        } catch (copyError) {
+          console.error('Failed to copy segment file:', copyError);
+        }
+        
         const segmentDuration = Date.now() - segmentStartTimeRef.current;
         const segment: RecordingSegment = {
-          id: generateId(),
-          uri,
+          id: segmentId,
+          uri: finalUri,
           startTime: segmentStartTimeRef.current - startTimeRef.current,
           duration: segmentDuration,
         };
@@ -219,7 +250,7 @@ export function useRecording(): UseRecordingResult {
         
         console.log('New segment started');
         isSavingSegmentRef.current = false;
-        return uri;
+        return finalUri;
       }
       
       isSavingSegmentRef.current = false;
@@ -377,7 +408,26 @@ export function useRecording(): UseRecordingResult {
       await recorder.stop();
       console.log('Recorder stopped');
 
-      const uri = recorder.uri;
+      const tempUri = recorder.uri;
+      
+      // 将临时文件复制到永久位置（避免被覆盖）
+      let finalUri: string | null = null;
+      if (tempUri) {
+        const uniqueFileName = `recording_${currentRecordingId}_${Date.now()}.m4a`;
+        const destPath = `${FileSystem.documentDirectory}${uniqueFileName}`;
+        try {
+          const fileInfo = await FileSystem.getInfoAsync(tempUri);
+          if (fileInfo.exists) {
+            await FileSystem.copyAsync({ from: tempUri, to: destPath });
+            finalUri = destPath;
+            console.log('Recording copied to:', finalUri);
+          }
+        } catch (copyError) {
+          console.error('Failed to copy recording file:', copyError);
+          // 如果复制失败，仍然使用原始 URI
+          finalUri = tempUri;
+        }
+      }
       
       // 获取所有分贝数据（从存储中读取）
       let allDecibelData: DecibelDataPoint[] = [];
@@ -392,8 +442,8 @@ export function useRecording(): UseRecordingResult {
         segments = savedSegments.map(s => s.uri);
         
         // 添加最后一个片段
-        if (uri) {
-          segments.push(uri);
+        if (finalUri) {
+          segments.push(finalUri);
         }
         
         // 清理临时数据
@@ -401,7 +451,7 @@ export function useRecording(): UseRecordingResult {
         await clearDecibelData(currentRecordingId);
       }
       
-      console.log('Recording URI:', uri);
+      console.log('Recording URI:', finalUri);
       console.log('Duration:', finalDuration);
       console.log('Decibel data points:', allDecibelData.length);
       console.log('Total segments:', segments.length);
@@ -414,9 +464,9 @@ export function useRecording(): UseRecordingResult {
       recordingIdRef.current = null;
       setRecordingId(null);
 
-      if (uri || segments.length > 0) {
+      if (finalUri || segments.length > 0) {
         return { 
-          uri: uri || segments[segments.length - 1] || '', 
+          uri: finalUri || segments[segments.length - 1] || '', 
           decibelData: allDecibelData, 
           duration: finalDuration,
           segments,
