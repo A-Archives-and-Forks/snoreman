@@ -15,17 +15,17 @@ import {
   clearDecibelData,
 } from '@/utils/storage';
 
-const METERING_INTERVAL_MS = 500; // 每500ms采样一次分贝
+const METERING_INTERVAL_MS = 1000; // 每1秒采样一次分贝
 const SEGMENT_INTERVAL_MS = 5 * 60 * 1000; // 每5分钟保存一个片段
-const MAX_MEMORY_DATA_POINTS = 200; // 内存中最多保留200个数据点（约100秒，用于UI显示）
+const MAX_MEMORY_DATA_POINTS = 120; // 内存中最多保留120个数据点（约2分钟，用于UI显示）
 const SAVE_TO_STORAGE_INTERVAL_MS = 10000; // 每10秒将数据写入存储
 
-// 录音配置
+// 录音配置 - 使用低码率以减小文件体积
 const RECORDING_OPTIONS: RecordingOptions = {
   extension: '.m4a',
-  sampleRate: 44100,
+  sampleRate: 22050, // 降低采样率（语音足够）
   numberOfChannels: 1,
-  bitRate: 128000,
+  bitRate: 32000, // 32kbps 低码率
   isMeteringEnabled: true,
   android: {
     extension: '.m4a',
@@ -34,12 +34,12 @@ const RECORDING_OPTIONS: RecordingOptions = {
   },
   ios: {
     extension: '.m4a',
-    audioQuality: 96,
-    sampleRate: 44100,
+    audioQuality: 32, // 低质量
+    sampleRate: 22050,
   },
   web: {
     mimeType: 'audio/webm',
-    bitsPerSecond: 128000,
+    bitsPerSecond: 32000,
   },
 };
 
