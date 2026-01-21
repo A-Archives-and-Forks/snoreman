@@ -29,6 +29,7 @@ import {
   SNORE_THRESHOLD_DB,
   getSnoreThreshold,
   saveSnoreThreshold,
+  recoverUnfinishedRecording,
 } from '@/utils/storage';
 
 function getSeverityColor(severity: string): string {
@@ -73,6 +74,7 @@ export default function HomeScreen() {
     startRecording,
     stopRecording,
     error,
+    segmentCount,
   } = useRecording();
   
   const router = useRouter();
@@ -86,15 +88,28 @@ export default function HomeScreen() {
     setRecordings(data);
   }, []);
 
-  // 组件首次挂载时加载保存的阈值设置
+  // 组件首次挂载时加载设置并检查未完成的录音
   useEffect(() => {
-    const loadThreshold = async () => {
+    const initialize = async () => {
+      // 加载阈值设置
       const savedThreshold = await getSnoreThreshold();
       console.log('Loaded threshold:', savedThreshold);
       setThreshold(savedThreshold);
+      
+      // 检查并恢复未完成的录音
+      const recoveredRecording = await recoverUnfinishedRecording();
+      if (recoveredRecording) {
+        console.log('Recovered recording:', recoveredRecording.id);
+        Alert.alert(
+          '录音已恢复',
+          `检测到上次未完成的录音（${formatDuration(recoveredRecording.duration)}），已自动保存。`,
+          [{ text: '好的' }]
+        );
+        await loadRecordings();
+      }
     };
-    loadThreshold();
-  }, []);
+    initialize();
+  }, [loadRecordings]);
 
   useFocusEffect(
     useCallback(() => {
@@ -113,18 +128,15 @@ export default function HomeScreen() {
       const result = await stopRecording();
       console.log('stopRecording result:', result);
       
-      if (result && result.uri) {
+      if (result && (result.uri || result.segments.length > 0)) {
         // 保存当前 duration，因为 stopRecording 后 hook 的 duration 会被重置
         const recordingDuration = duration;
         
-        // recorder.uri 返回的是完整的 file:// URI
-        // 直接使用原始 URI，因为：
-        // 1. expo-audio 的录音文件会保存在 app 的 cache 目录
-        // 2. cache 目录的文件在 app 存活期间是持久的
-        // 3. 复制文件可能因为各种原因失败，但原始文件是可用的
-        let finalUri = result.uri;
+        // 使用最后一个片段的 URI 作为主 URI
+        let finalUri = result.uri || result.segments[result.segments.length - 1];
         
         console.log('Recording URI:', finalUri);
+        console.log('Segments count:', result.segments.length);
         
         // 使用当前阈值分析分贝数据
         const analysis = analyzeDecibelData(result.decibelData, threshold);
@@ -138,6 +150,7 @@ export default function HomeScreen() {
           decibelData: result.decibelData,
           analysis,
           threshold, // 保存当前阈值
+          audioSegments: result.segments.length > 1 ? result.segments : undefined, // 只有多个片段时才保存
         };
 
         console.log('Saving recording:', newRecording.id);
@@ -323,6 +336,15 @@ export default function HomeScreen() {
               <ThemedText style={styles.statLabel}>最大分贝</ThemedText>
             </View>
           </View>
+
+          {/* 已保存片段提示 */}
+          {segmentCount > 0 && (
+            <View style={styles.segmentInfo}>
+              <ThemedText style={styles.segmentInfoText}>
+                已自动保存 {segmentCount} 个片段，数据安全
+              </ThemedText>
+            </View>
+          )}
         </View>
       )}
 
@@ -638,5 +660,17 @@ const styles = StyleSheet.create({
   thresholdHint: {
     fontSize: 12,
     opacity: 0.5,
+  },
+  segmentInfo: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(128, 128, 128, 0.2)',
+    alignItems: 'center',
+  },
+  segmentInfoText: {
+    fontSize: 12,
+    color: '#4CAF50',
+    fontWeight: '500',
   },
 });

@@ -16,6 +16,7 @@ export interface Recording {
   decibelData: DecibelDataPoint[]; // 分贝数据
   analysis?: SnoreAnalysis;
   threshold?: number; // 打鼾阈值
+  audioSegments?: string[]; // 音频片段URI列表（用于长录音）
 }
 
 export interface SnoreAnalysis {
@@ -44,6 +45,8 @@ export const MIN_SNORE_DURATION_MS = 1000;
 const RECORDINGS_KEY = 'sleep_recordings';
 const CURRENT_RECORDING_KEY = 'current_recording_data';
 const SNORE_THRESHOLD_KEY = 'snore_threshold';
+const RECORDING_SEGMENTS_KEY = 'recording_segments'; // 录音片段
+const DECIBEL_DATA_KEY = 'decibel_data'; // 分贝数据（分块存储）
 
 export async function getRecordings(): Promise<Recording[]> {
   try {
@@ -121,11 +124,12 @@ export async function deleteRecording(id: string): Promise<void> {
   }
 }
 
-// 临时保存录音中的分贝数据（防止应用被杀时数据丢失）
+// 临时保存录音中的元数据（不包含完整分贝数据，减少内存占用）
 export async function saveCurrentRecordingData(data: {
   id: string;
   startTime: number;
-  decibelData: DecibelDataPoint[];
+  threshold?: number;
+  createdAt?: number;
 }): Promise<void> {
   try {
     await AsyncStorage.setItem(CURRENT_RECORDING_KEY, JSON.stringify(data));
@@ -137,7 +141,8 @@ export async function saveCurrentRecordingData(data: {
 export async function getCurrentRecordingData(): Promise<{
   id: string;
   startTime: number;
-  decibelData: DecibelDataPoint[];
+  threshold?: number;
+  createdAt?: number;
 } | null> {
   try {
     const data = await AsyncStorage.getItem(CURRENT_RECORDING_KEY);
@@ -156,6 +161,137 @@ export async function clearCurrentRecordingData(): Promise<void> {
     await AsyncStorage.removeItem(CURRENT_RECORDING_KEY);
   } catch (error) {
     console.error('Failed to clear current recording data:', error);
+  }
+}
+
+// 分贝数据分块存储（每块最多存储1000个数据点，约8分钟的数据）
+const DECIBEL_CHUNK_SIZE = 1000;
+
+// 追加分贝数据到存储
+export async function appendDecibelData(recordingId: string, newData: DecibelDataPoint[]): Promise<void> {
+  try {
+    if (newData.length === 0) return;
+    
+    // 获取当前块索引
+    const metaKey = `${DECIBEL_DATA_KEY}_${recordingId}_meta`;
+    const metaData = await AsyncStorage.getItem(metaKey);
+    let meta = metaData ? JSON.parse(metaData) : { chunkCount: 0, totalPoints: 0, lastChunkSize: 0 };
+    
+    // 获取最后一个块
+    let currentChunkIndex = Math.max(0, meta.chunkCount - 1);
+    let currentChunkKey = `${DECIBEL_DATA_KEY}_${recordingId}_${currentChunkIndex}`;
+    let currentChunkData = await AsyncStorage.getItem(currentChunkKey);
+    let currentChunk: DecibelDataPoint[] = currentChunkData ? JSON.parse(currentChunkData) : [];
+    
+    // 追加数据
+    for (const point of newData) {
+      if (currentChunk.length >= DECIBEL_CHUNK_SIZE) {
+        // 保存当前块，创建新块
+        await AsyncStorage.setItem(currentChunkKey, JSON.stringify(currentChunk));
+        currentChunkIndex++;
+        currentChunkKey = `${DECIBEL_DATA_KEY}_${recordingId}_${currentChunkIndex}`;
+        currentChunk = [];
+        meta.chunkCount = currentChunkIndex + 1;
+      }
+      currentChunk.push(point);
+      meta.totalPoints++;
+    }
+    
+    // 保存当前块和元数据
+    await AsyncStorage.setItem(currentChunkKey, JSON.stringify(currentChunk));
+    meta.lastChunkSize = currentChunk.length;
+    if (meta.chunkCount === 0) meta.chunkCount = 1;
+    await AsyncStorage.setItem(metaKey, JSON.stringify(meta));
+    
+    console.log(`Appended ${newData.length} decibel points, total: ${meta.totalPoints}`);
+  } catch (error) {
+    console.error('Failed to append decibel data:', error);
+  }
+}
+
+// 获取所有分贝数据
+export async function getAllDecibelData(recordingId: string): Promise<DecibelDataPoint[]> {
+  try {
+    const metaKey = `${DECIBEL_DATA_KEY}_${recordingId}_meta`;
+    const metaData = await AsyncStorage.getItem(metaKey);
+    if (!metaData) return [];
+    
+    const meta = JSON.parse(metaData);
+    const allData: DecibelDataPoint[] = [];
+    
+    for (let i = 0; i < meta.chunkCount; i++) {
+      const chunkKey = `${DECIBEL_DATA_KEY}_${recordingId}_${i}`;
+      const chunkData = await AsyncStorage.getItem(chunkKey);
+      if (chunkData) {
+        allData.push(...JSON.parse(chunkData));
+      }
+    }
+    
+    console.log(`Retrieved ${allData.length} decibel points`);
+    return allData;
+  } catch (error) {
+    console.error('Failed to get all decibel data:', error);
+    return [];
+  }
+}
+
+// 清除分贝数据
+export async function clearDecibelData(recordingId: string): Promise<void> {
+  try {
+    const metaKey = `${DECIBEL_DATA_KEY}_${recordingId}_meta`;
+    const metaData = await AsyncStorage.getItem(metaKey);
+    if (metaData) {
+      const meta = JSON.parse(metaData);
+      for (let i = 0; i < meta.chunkCount; i++) {
+        await AsyncStorage.removeItem(`${DECIBEL_DATA_KEY}_${recordingId}_${i}`);
+      }
+      await AsyncStorage.removeItem(metaKey);
+    }
+  } catch (error) {
+    console.error('Failed to clear decibel data:', error);
+  }
+}
+
+// 录音片段相关
+export interface RecordingSegment {
+  id: string;
+  uri: string;
+  startTime: number; // 相对于录音开始的时间
+  duration: number;
+}
+
+// 保存录音片段
+export async function saveRecordingSegment(recordingId: string, segment: RecordingSegment): Promise<void> {
+  try {
+    const segments = await getRecordingSegments(recordingId);
+    segments.push(segment);
+    await AsyncStorage.setItem(`${RECORDING_SEGMENTS_KEY}_${recordingId}`, JSON.stringify(segments));
+    console.log('Saved recording segment:', segment.id, 'for recording:', recordingId);
+  } catch (error) {
+    console.error('Failed to save recording segment:', error);
+  }
+}
+
+// 获取录音片段列表
+export async function getRecordingSegments(recordingId: string): Promise<RecordingSegment[]> {
+  try {
+    const data = await AsyncStorage.getItem(`${RECORDING_SEGMENTS_KEY}_${recordingId}`);
+    if (data) {
+      return JSON.parse(data);
+    }
+    return [];
+  } catch (error) {
+    console.error('Failed to get recording segments:', error);
+    return [];
+  }
+}
+
+// 清除录音片段
+export async function clearRecordingSegments(recordingId: string): Promise<void> {
+  try {
+    await AsyncStorage.removeItem(`${RECORDING_SEGMENTS_KEY}_${recordingId}`);
+  } catch (error) {
+    console.error('Failed to clear recording segments:', error);
   }
 }
 
@@ -326,5 +462,74 @@ export async function getSnoreThreshold(): Promise<number> {
   } catch (error) {
     console.error('Failed to get snore threshold:', error);
     return SNORE_THRESHOLD_DB;
+  }
+}
+
+// 检查并恢复未完成的录音（应用意外退出后调用）
+export async function recoverUnfinishedRecording(): Promise<Recording | null> {
+  try {
+    const currentData = await getCurrentRecordingData();
+    if (!currentData) {
+      return null;
+    }
+
+    console.log('Found unfinished recording:', currentData.id);
+
+    // 获取分贝数据
+    const decibelData = await getAllDecibelData(currentData.id);
+    if (decibelData.length === 0) {
+      console.log('No decibel data found, clearing');
+      await clearCurrentRecordingData();
+      await clearDecibelData(currentData.id);
+      return null;
+    }
+
+    // 获取音频片段
+    const segments = await getRecordingSegments(currentData.id);
+    const segmentUris = segments.map(s => s.uri);
+
+    if (segmentUris.length === 0) {
+      console.log('No audio segments found, clearing');
+      await clearCurrentRecordingData();
+      await clearDecibelData(currentData.id);
+      await clearRecordingSegments(currentData.id);
+      return null;
+    }
+
+    // 计算录音时长
+    const lastDataPoint = decibelData[decibelData.length - 1];
+    const duration = lastDataPoint ? lastDataPoint.timestamp : 0;
+
+    // 获取阈值
+    const threshold = await getSnoreThreshold();
+
+    // 分析数据
+    const analysis = analyzeDecibelData(decibelData, threshold);
+
+    // 创建录音记录
+    const recording: Recording = {
+      id: currentData.id,
+      uri: segmentUris[segmentUris.length - 1], // 使用最后一个片段作为主URI
+      createdAt: currentData.createdAt || currentData.startTime,
+      duration,
+      decibelData,
+      analysis,
+      threshold,
+      audioSegments: segmentUris.length > 1 ? segmentUris : undefined,
+    };
+
+    // 保存录音
+    await saveRecording(recording);
+    console.log('Recovered recording saved:', recording.id);
+
+    // 清理临时数据
+    await clearCurrentRecordingData();
+    await clearDecibelData(currentData.id);
+    await clearRecordingSegments(currentData.id);
+
+    return recording;
+  } catch (error) {
+    console.error('Failed to recover unfinished recording:', error);
+    return null;
   }
 }

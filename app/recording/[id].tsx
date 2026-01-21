@@ -8,7 +8,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import Slider from '@react-native-community/slider';
-import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
+import { useAudioPlayer, useAudioPlayerStatus, AudioModule } from 'expo-audio';
 import { useLocalSearchParams, Stack, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -138,9 +138,14 @@ export default function RecordingDetailScreen() {
     loadRecording();
   }, [loadRecording]);
 
-  // 检查播放器是否准备好
+  // 检查播放器是否准备好，并设置音频模式
   useEffect(() => {
     if (recording?.uri && player) {
+      // 设置音频模式，确保通过扬声器播放
+      AudioModule.setAudioModeAsync({
+        playsInSilentMode: true,
+        shouldRouteThroughEarpiece: false, // false = 使用扬声器
+      });
       setIsPlayerReady(true);
     }
     return () => {
@@ -251,6 +256,8 @@ export default function RecordingDetailScreen() {
   const decibelData = recording.decibelData || [];
   const hasDecibelData = decibelData.length > 0;
   const playbackPosition = (status?.currentTime || 0) * 1000; // 转换为毫秒
+  // 使用播放器报告的实际音频时长，如果没有则使用保存的时长
+  const actualDuration = status?.duration ? status.duration * 1000 : recording.duration;
 
   return (
     <ThemedView style={styles.container}>
@@ -417,14 +424,14 @@ export default function RecordingDetailScreen() {
             </TouchableOpacity>
             <View style={styles.playbackInfo}>
               <ThemedText style={styles.playbackTime}>
-                {formatDuration(playbackPosition)} / {formatDuration(recording.duration)}
+                {formatDuration(playbackPosition)} / {formatDuration(actualDuration)}
               </ThemedText>
               <View style={styles.progressBar}>
                 <View
                   style={[
                     styles.progressFill,
                     {
-                      width: `${recording.duration > 0 ? (playbackPosition / recording.duration) * 100 : 0}%`,
+                      width: `${actualDuration > 0 ? Math.min((playbackPosition / actualDuration) * 100, 100) : 0}%`,
                       backgroundColor: '#6C63FF',
                     },
                   ]}
