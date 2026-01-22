@@ -13,7 +13,11 @@
       "bundleIdentifier": "com.snoreman.app",
       "infoPlist": {
         "NSMicrophoneUsageDescription": "需要使用麦克风来录制睡眠时的音频，以分析打鼾情况",
-        "UIBackgroundModes": ["audio"]
+        "UIBackgroundModes": [
+          "audio",
+          "audio"
+        ],
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
@@ -30,7 +34,9 @@
         "RECORD_AUDIO",
         "FOREGROUND_SERVICE",
         "FOREGROUND_SERVICE_MICROPHONE",
-        "WAKE_LOCK"
+        "WAKE_LOCK",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS"
       ]
     },
     "web": {
@@ -61,6 +67,13 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "c13e55bf-8773-499d-809b-4a746405c36e"
+      }
+    },
+    "owner": "timqian_2"
   }
 }
