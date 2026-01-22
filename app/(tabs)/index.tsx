@@ -128,7 +128,7 @@ export default function HomeScreen() {
         try {
           const sourceFile = new File(result.uri);
           if (sourceFile.exists) {
-            // 创建唯一的文件名：recording_时间戳_随机ID.m4a
+            // 创建唯一的文件名
             const uniqueFileName = `recording_${Date.now()}_${recordingId}.m4a`;
             // 使用 document 目录来永久保存（cache 目录可能被系统清理）
             const destFile = new File(Paths.document, uniqueFileName);
@@ -136,7 +136,7 @@ export default function HomeScreen() {
             // 复制文件
             sourceFile.copy(destFile);
             finalUri = destFile.uri;
-            console.log('Recording copied to:', finalUri);
+            console.log('Recording copied to:', finalUri, 'Size:', sourceFile.size, 'bytes');
           } else {
             console.warn('Source file does not exist:', result.uri);
           }

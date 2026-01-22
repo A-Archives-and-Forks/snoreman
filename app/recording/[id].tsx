@@ -299,7 +299,7 @@ export default function RecordingDetailScreen() {
       await Sharing.shareAsync(tempFile.uri, {
         mimeType: 'audio/mp4',
         dialogTitle: '导出录音',
-        UTI: 'public.mpeg-4-audio', // iOS
+        UTI: 'public.mpeg-4-audio',
       });
       
       // 清理临时文件
