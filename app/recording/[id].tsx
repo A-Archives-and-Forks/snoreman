@@ -6,11 +6,14 @@ import {
   ScrollView,
   Alert,
   ActivityIndicator,
+  Platform,
 } from 'react-native';
 import Slider from '@react-native-community/slider';
 import { useAudioPlayer, useAudioPlayerStatus, setAudioModeAsync } from 'expo-audio';
 import { useLocalSearchParams, Stack, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as Sharing from 'expo-sharing';
+import { File, Paths } from 'expo-file-system';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -254,6 +257,54 @@ export default function RecordingDetailScreen() {
         },
       },
     ]);
+  };
+
+  // 导出录音
+  const handleExport = async () => {
+    if (!recording) return;
+    
+    try {
+      // 检查是否支持分享
+      const isAvailable = await Sharing.isAvailableAsync();
+      if (!isAvailable) {
+        Alert.alert('不支持', '当前设备不支持分享功能');
+        return;
+      }
+      
+      // 检查文件是否存在
+      const sourceFile = new File(recording.uri);
+      if (!sourceFile.exists) {
+        Alert.alert('错误', '录音文件不存在');
+        return;
+      }
+      
+      // 生成友好的文件名
+      const date = new Date(recording.createdAt);
+      const dateStr = `${date.getFullYear()}${(date.getMonth() + 1).toString().padStart(2, '0')}${date.getDate().toString().padStart(2, '0')}`;
+      const timeStr = `${date.getHours().toString().padStart(2, '0')}${date.getMinutes().toString().padStart(2, '0')}`;
+      const fileName = `睡眠录音_${dateStr}_${timeStr}.m4a`;
+      
+      // 复制到临时目录并重命名
+      const tempFile = new File(Paths.cache, fileName);
+      sourceFile.copy(tempFile);
+      
+      // 分享文件
+      await Sharing.shareAsync(tempFile.uri, {
+        mimeType: 'audio/mp4',
+        dialogTitle: '导出录音',
+        UTI: 'public.mpeg-4-audio', // iOS
+      });
+      
+      // 清理临时文件
+      try {
+        tempFile.delete();
+      } catch (e) {
+        // 忽略清理错误
+      }
+    } catch (error) {
+      console.error('Export error:', error);
+      Alert.alert('错误', '导出失败，请重试');
+    }
   };
 
   if (!recording) {
@@ -639,6 +690,15 @@ export default function RecordingDetailScreen() {
         >
           <ThemedText style={styles.deleteButtonText}>删除录音</ThemedText>
         </TouchableOpacity>
+
+        {/* Export Button */}
+        <TouchableOpacity
+          style={styles.exportButton}
+          onPress={handleExport}
+          activeOpacity={0.8}
+        >
+          <ThemedText style={styles.exportButtonText}>导出录音</ThemedText>
+        </TouchableOpacity>
       </ScrollView>
     </ThemedView>
   );
@@ -941,6 +1001,20 @@ const styles = StyleSheet.create({
   },
   deleteButtonText: {
     color: '#F44336',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  exportButton: {
+    backgroundColor: 'rgba(108, 99, 255, 0.1)',
+    paddingVertical: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: '#6C63FF',
+  },
+  exportButtonText: {
+    color: '#6C63FF',
     fontSize: 16,
     fontWeight: '600',
   },
