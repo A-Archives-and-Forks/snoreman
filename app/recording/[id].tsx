@@ -128,7 +128,14 @@ export default function RecordingDetailScreen() {
 
   const loadRecording = useCallback(async () => {
     if (id) {
+      console.log('[RecordingDetail] Loading recording with ID:', id);
       const data = await getRecording(id);
+      console.log('[RecordingDetail] Loaded recording:', {
+        id: data?.id,
+        uri: data?.uri,
+        createdAt: data?.createdAt,
+        duration: data?.duration,
+      });
       setRecording(data);
       // 加载录音保存的阈值，如果没有则使用默认值
       if (data?.threshold !== undefined) {

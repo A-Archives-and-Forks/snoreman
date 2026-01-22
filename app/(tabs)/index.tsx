@@ -11,6 +11,7 @@ import Slider from '@react-native-community/slider';
 import { Swipeable } from 'react-native-gesture-handler';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { File, Paths } from 'expo-file-system';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -117,21 +118,41 @@ export default function HomeScreen() {
         // 保存当前 duration，因为 stopRecording 后 hook 的 duration 会被重置
         const recordingDuration = duration;
         
-        // recorder.uri 返回的是完整的 file:// URI
-        // 直接使用原始 URI，因为：
-        // 1. expo-audio 的录音文件会保存在 app 的 cache 目录
-        // 2. cache 目录的文件在 app 存活期间是持久的
-        // 3. 复制文件可能因为各种原因失败，但原始文件是可用的
+        // 生成唯一的录音 ID
+        const recordingId = Date.now().toString(36) + Math.random().toString(36).substr(2);
+        
+        // expo-audio 的 recorder.uri 每次可能返回相同的缓存路径
+        // 必须复制到永久存储位置，使用唯一文件名
         let finalUri = result.uri;
         
-        console.log('Recording URI:', finalUri);
+        try {
+          const sourceFile = new File(result.uri);
+          if (sourceFile.exists) {
+            // 创建唯一的文件名：recording_时间戳_随机ID.m4a
+            const uniqueFileName = `recording_${Date.now()}_${recordingId}.m4a`;
+            // 使用 document 目录来永久保存（cache 目录可能被系统清理）
+            const destFile = new File(Paths.document, uniqueFileName);
+            
+            // 复制文件
+            sourceFile.copy(destFile);
+            finalUri = destFile.uri;
+            console.log('Recording copied to:', finalUri);
+          } else {
+            console.warn('Source file does not exist:', result.uri);
+          }
+        } catch (copyError) {
+          console.warn('Failed to copy recording file, using original URI:', copyError);
+          // 如果复制失败，继续使用原始 URI
+        }
+        
+        console.log('Final Recording URI:', finalUri);
         
         // 使用当前阈值分析分贝数据
         const analysis = analyzeDecibelData(result.decibelData, threshold);
         console.log('Analysis result:', analysis);
         
         const newRecording: RecordingData = {
-          id: Date.now().toString(36) + Math.random().toString(36).substr(2),
+          id: recordingId,
           uri: finalUri,
           createdAt: Date.now(),
           duration: recordingDuration > 0 ? recordingDuration : 1000,
@@ -140,7 +161,7 @@ export default function HomeScreen() {
           threshold, // 保存当前阈值
         };
 
-        console.log('Saving recording:', newRecording.id);
+        console.log('Saving recording:', newRecording.id, 'URI:', newRecording.uri);
         await saveRecording(newRecording);
         console.log('Recording saved, reloading list');
         await loadRecordings();
