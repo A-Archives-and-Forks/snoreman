@@ -8,7 +8,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import Slider from '@react-native-community/slider';
-import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
+import { useAudioPlayer, useAudioPlayerStatus, setAudioModeAsync } from 'expo-audio';
 import { useLocalSearchParams, Stack, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -137,6 +137,24 @@ export default function RecordingDetailScreen() {
   useEffect(() => {
     loadRecording();
   }, [loadRecording]);
+
+  // 设置音频模式 - 从扬声器播放
+  useEffect(() => {
+    const setupAudioMode = async () => {
+      try {
+        await setAudioModeAsync({
+          playsInSilentMode: true,
+          shouldRouteThroughEarpiece: false, // 从扬声器播放，而非听筒
+          interruptionMode: 'doNotMix',
+          allowsRecording: false,
+          shouldPlayInBackground: false,
+        });
+      } catch (e) {
+        console.error('Failed to set audio mode:', e);
+      }
+    };
+    setupAudioMode();
+  }, []);
 
   // 检查播放器是否准备好
   useEffect(() => {
