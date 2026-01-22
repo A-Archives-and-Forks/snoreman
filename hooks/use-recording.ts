@@ -66,13 +66,44 @@ export function useRecording(): UseRecordingResult {
   const isRecordingRef = useRef<boolean>(false);
   const durationRef = useRef<number>(0);
 
-  // 将 metering 值转换为分贝 (0-100 范围)
+  // 将 metering 值转换为更准确的分贝显示
+  // expo-audio 的 metering 返回 dBFS (decibels relative to full scale)
+  // 范围大约是 -160 (静音) 到 0 (最大音量)
+  // 
+  // 真实世界的分贝参考：
+  // - 10 dB: 呼吸声
+  // - 20 dB: 耳语
+  // - 30 dB: 安静的房间
+  // - 40 dB: 安静的办公室
+  // - 50 dB: 正常交谈
+  // - 60 dB: 大声说话
+  // - 70 dB: 吸尘器
+  // - 80 dB: 闹市街道
+  //
+  // 打鼾通常在 40-70 dB 范围
   const meteringToDecibel = useCallback((metering: number | undefined): number => {
     if (metering === undefined || metering === null) return 0;
-    // expo-audio 的 metering 值通常在 -160 到 0 之间
-    // -160 表示静音，0 表示最大音量
-    const normalized = Math.max(0, metering + 160);
-    return Math.round(normalized * 100 / 160);
+    
+    // metering 值通常在 -160 到 0 之间
+    // -160 dBFS 对应极安静 (~0 dB SPL)
+    // -60 dBFS 对应安静房间 (~30 dB SPL)
+    // -40 dBFS 对应正常说话 (~50 dB SPL)
+    // -20 dBFS 对应大声说话 (~70 dB SPL)
+    // 0 dBFS 对应最大音量 (~90 dB SPL)
+    
+    // 使用更合理的映射：
+    // metering: -160 ~ 0 -> 实际显示: 0 ~ 90 dB
+    // 但我们主要关心 -80 到 -10 这个范围（对应 20-80 dB）
+    
+    // 将 dBFS 转换为近似的 SPL 分贝值
+    // 公式：SPL ≈ metering + 90 (简化映射)
+    // 然后限制在合理范围内
+    const spl = metering + 90;
+    
+    // 限制在 0-100 范围，但实际上 0-20 很少见
+    const clampedSpl = Math.max(0, Math.min(100, spl));
+    
+    return Math.round(clampedSpl);
   }, []);
 
   // 使用 interval 主动获取 metering 数据
@@ -82,7 +113,6 @@ export function useRecording(): UseRecordingResult {
         try {
           // getStatus() 返回 RecorderState，包含 metering 字段
           const status = recorder.getStatus();
-          console.log('Recorder status:', JSON.stringify(status));
           
           // status.metering 在 expo-audio 中是可选的
           // 注意：在 iOS 模拟器上可能无法获取真实的 metering 数据
@@ -90,20 +120,20 @@ export function useRecording(): UseRecordingResult {
           let decibel: number;
           const metering = status.metering;
           
-          if (metering !== undefined && metering !== null && metering !== 0) {
-            // expo-audio 的 metering 值通常在 -160 到 0 之间
-            // -160 表示静音，0 表示最大音量
+          // 检查是否有有效的 metering 数据
+          // metering 为 0 在安静环境下是不可能的（应该是负数），所以 0 表示数据无效
+          if (metering !== undefined && metering !== null && metering < 0) {
             decibel = meteringToDecibel(metering);
-            console.log('Real metering value:', metering, '-> decibel:', decibel);
+            console.log(`[Metering] Raw: ${metering.toFixed(1)} dBFS -> Display: ${decibel} dB`);
           } else {
             // 在模拟器上 metering 可能不可用或始终为 0
             // 生成模拟数据以便测试 UI
-            // 范围：20-70 dB，偶尔超过 45dB 阈值以触发打鼾检测
-            const baseDecibel = 25 + Math.random() * 30;
+            // 模拟安静房间环境：25-40 dB，偶尔有打鼾 50-65 dB
+            const baseDecibel = 25 + Math.random() * 15; // 25-40 dB 基础噪音
             // 10% 概率产生较高分贝（模拟打鼾）
-            decibel = Math.random() < 0.1 ? baseDecibel + 25 : baseDecibel;
-            decibel = Math.round(Math.min(100, decibel));
-            console.log('Simulated decibel (metering unavailable):', decibel);
+            decibel = Math.random() < 0.1 ? 50 + Math.random() * 15 : baseDecibel;
+            decibel = Math.round(decibel);
+            console.log(`[Metering] Simulated: ${decibel} dB (raw metering: ${metering})`);
           }
           
           const timestamp = Date.now() - startTimeRef.current;
@@ -118,8 +148,6 @@ export function useRecording(): UseRecordingResult {
           decibelDataRef.current.push(dataPoint);
           setDecibelData([...decibelDataRef.current]);
           setCurrentDecibel(decibel);
-          
-          console.log('Decibel recorded:', decibel, 'at', timestamp, 'isSnoring:', isSnoring);
         } catch (e) {
           console.error('Error getting recorder status:', e);
         }
