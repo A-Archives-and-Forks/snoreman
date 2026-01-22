@@ -8,14 +8,16 @@ import {
   generateId,
 } from '@/utils/storage';
 
-const METERING_INTERVAL_MS = 500; // 每500ms采样一次分贝
+const METERING_INTERVAL_MS = 1000; // 每1秒采样一次分贝（降低采样频率）
 
-// 录音配置
+// 录音配置 - 优化音频体积
+// 使用低码率(16kbps)和低采样率(8000Hz)来减小文件大小
+// 对于打鼾检测来说，音质要求不高
 const RECORDING_OPTIONS: RecordingOptions = {
   extension: '.m4a',
-  sampleRate: 44100,
-  numberOfChannels: 1,
-  bitRate: 128000,
+  sampleRate: 8000,        // 降低采样率：44100 -> 8000 Hz（电话质量）
+  numberOfChannels: 1,     // 单声道
+  bitRate: 16000,          // 降低码率：128000 -> 16000 bps (16kbps)
   isMeteringEnabled: true,
   android: {
     extension: '.m4a',
@@ -24,12 +26,12 @@ const RECORDING_OPTIONS: RecordingOptions = {
   },
   ios: {
     extension: '.m4a',
-    audioQuality: 96,
-    sampleRate: 44100,
+    audioQuality: 32,      // 降低音质：96 -> 32（最低质量）
+    sampleRate: 8000,      // 降低采样率
   },
   web: {
     mimeType: 'audio/webm',
-    bitsPerSecond: 128000,
+    bitsPerSecond: 16000,  // 降低码率
   },
 };
 
