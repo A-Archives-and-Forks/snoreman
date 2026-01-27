@@ -8,14 +8,20 @@ export interface DecibelDataPoint {
   isSnoring: boolean; // 是否被识别为打鼾
 }
 
-export interface Recording {
+// 录音元数据（不含分贝数据，用于列表显示）
+export interface RecordingMeta {
   id: string;
   uri: string;
   createdAt: number;
   duration: number; // in milliseconds
-  decibelData: DecibelDataPoint[]; // 分贝数据
   analysis?: SnoreAnalysis;
   threshold?: number; // 打鼾阈值
+  dataPointCount?: number; // 分贝数据点数量
+}
+
+// 完整录音数据（含分贝数据）
+export interface Recording extends RecordingMeta {
+  decibelData: DecibelDataPoint[]; // 分贝数据
 }
 
 export interface SnoreAnalysis {
@@ -41,28 +47,144 @@ export const SNORE_THRESHOLD_DB = 45;
 // 最小打鼾持续时间 (毫秒)
 export const MIN_SNORE_DURATION_MS = 1000;
 
-const RECORDINGS_KEY = 'sleep_recordings';
+const RECORDINGS_META_KEY = 'sleep_recordings_meta'; // 只存元数据
+const RECORDINGS_KEY = 'sleep_recordings'; // 旧版兼容
 const CURRENT_RECORDING_KEY = 'current_recording_data';
 const SNORE_THRESHOLD_KEY = 'snore_threshold';
 
-export async function getRecordings(): Promise<Recording[]> {
+// 获取分贝数据的存储 key
+function getDecibelDataKey(id: string): string {
+  return `decibel_data_${id}`;
+}
+
+// 获取录音列表（只返回元数据，不含分贝数据）
+export async function getRecordingsMeta(): Promise<RecordingMeta[]> {
   try {
-    const data = await AsyncStorage.getItem(RECORDINGS_KEY);
-    if (data) {
-      return JSON.parse(data);
+    // 先尝试读取新格式
+    const metaData = await AsyncStorage.getItem(RECORDINGS_META_KEY);
+    if (metaData) {
+      return JSON.parse(metaData);
     }
+    
+    // 兼容旧格式：从旧数据迁移
+    const oldData = await AsyncStorage.getItem(RECORDINGS_KEY);
+    if (oldData) {
+      const oldRecordings: Recording[] = JSON.parse(oldData);
+      // 迁移到新格式
+      await migrateToNewFormat(oldRecordings);
+      // 返回元数据
+      return oldRecordings.map(r => ({
+        id: r.id,
+        uri: r.uri,
+        createdAt: r.createdAt,
+        duration: r.duration,
+        analysis: r.analysis,
+        threshold: r.threshold,
+        dataPointCount: r.decibelData?.length || 0,
+      }));
+    }
+    
     return [];
   } catch (error) {
-    console.error('Failed to get recordings:', error);
+    console.error('Failed to get recordings meta:', error);
     return [];
   }
 }
 
+// 迁移旧数据到新格式
+async function migrateToNewFormat(oldRecordings: Recording[]): Promise<void> {
+  try {
+    console.log('Migrating to new storage format...');
+    const metas: RecordingMeta[] = [];
+    
+    for (const recording of oldRecordings) {
+      // 保存分贝数据到单独的 key
+      if (recording.decibelData && recording.decibelData.length > 0) {
+        await AsyncStorage.setItem(
+          getDecibelDataKey(recording.id),
+          JSON.stringify(recording.decibelData)
+        );
+      }
+      
+      // 提取元数据
+      metas.push({
+        id: recording.id,
+        uri: recording.uri,
+        createdAt: recording.createdAt,
+        duration: recording.duration,
+        analysis: recording.analysis,
+        threshold: recording.threshold,
+        dataPointCount: recording.decibelData?.length || 0,
+      });
+    }
+    
+    // 保存元数据列表
+    await AsyncStorage.setItem(RECORDINGS_META_KEY, JSON.stringify(metas));
+    
+    // 删除旧数据
+    await AsyncStorage.removeItem(RECORDINGS_KEY);
+    
+    console.log('Migration complete');
+  } catch (error) {
+    console.error('Migration failed:', error);
+  }
+}
+
+// 兼容旧 API：获取所有录音（含分贝数据）- 尽量避免使用
+export async function getRecordings(): Promise<Recording[]> {
+  const metas = await getRecordingsMeta();
+  const recordings: Recording[] = [];
+  
+  for (const meta of metas) {
+    const decibelData = await getDecibelData(meta.id);
+    recordings.push({
+      ...meta,
+      decibelData: decibelData || [],
+    });
+  }
+  
+  return recordings;
+}
+
+// 获取单个录音的分贝数据
+export async function getDecibelData(id: string): Promise<DecibelDataPoint[] | null> {
+  try {
+    const data = await AsyncStorage.getItem(getDecibelDataKey(id));
+    if (data) {
+      return JSON.parse(data);
+    }
+    return null;
+  } catch (error) {
+    console.error('Failed to get decibel data:', error);
+    return null;
+  }
+}
+
+// 保存录音（分离存储）
 export async function saveRecording(recording: Recording): Promise<void> {
   try {
-    const recordings = await getRecordings();
-    recordings.unshift(recording);
-    await AsyncStorage.setItem(RECORDINGS_KEY, JSON.stringify(recordings));
+    // 1. 保存分贝数据到单独的 key
+    if (recording.decibelData && recording.decibelData.length > 0) {
+      await AsyncStorage.setItem(
+        getDecibelDataKey(recording.id),
+        JSON.stringify(recording.decibelData)
+      );
+    }
+    
+    // 2. 保存元数据
+    const metas = await getRecordingsMeta();
+    const meta: RecordingMeta = {
+      id: recording.id,
+      uri: recording.uri,
+      createdAt: recording.createdAt,
+      duration: recording.duration,
+      analysis: recording.analysis,
+      threshold: recording.threshold,
+      dataPointCount: recording.decibelData?.length || 0,
+    };
+    metas.unshift(meta);
+    await AsyncStorage.setItem(RECORDINGS_META_KEY, JSON.stringify(metas));
+    
     // 清除临时录音数据
     await AsyncStorage.removeItem(CURRENT_RECORDING_KEY);
   } catch (error) {
@@ -71,23 +193,41 @@ export async function saveRecording(recording: Recording): Promise<void> {
   }
 }
 
+// 获取单个录音（含分贝数据）
 export async function getRecording(id: string): Promise<Recording | null> {
   try {
-    const recordings = await getRecordings();
-    return recordings.find((r) => r.id === id) || null;
+    const metas = await getRecordingsMeta();
+    const meta = metas.find((r) => r.id === id);
+    if (!meta) return null;
+    
+    // 加载分贝数据
+    const decibelData = await getDecibelData(id);
+    
+    return {
+      ...meta,
+      decibelData: decibelData || [],
+    };
   } catch (error) {
     console.error('Failed to get recording:', error);
     return null;
   }
 }
 
+// 更新录音
 export async function updateRecording(id: string, updates: Partial<Recording>): Promise<void> {
   try {
-    const recordings = await getRecordings();
-    const index = recordings.findIndex((r) => r.id === id);
+    const metas = await getRecordingsMeta();
+    const index = metas.findIndex((r) => r.id === id);
     if (index !== -1) {
-      recordings[index] = { ...recordings[index], ...updates };
-      await AsyncStorage.setItem(RECORDINGS_KEY, JSON.stringify(recordings));
+      // 更新元数据
+      const { decibelData, ...metaUpdates } = updates;
+      metas[index] = { ...metas[index], ...metaUpdates };
+      await AsyncStorage.setItem(RECORDINGS_META_KEY, JSON.stringify(metas));
+      
+      // 如果有分贝数据更新，单独保存
+      if (decibelData) {
+        await AsyncStorage.setItem(getDecibelDataKey(id), JSON.stringify(decibelData));
+      }
     }
   } catch (error) {
     console.error('Failed to update recording:', error);
@@ -95,15 +235,16 @@ export async function updateRecording(id: string, updates: Partial<Recording>): 
   }
 }
 
+// 删除录音
 export async function deleteRecording(id: string): Promise<void> {
   try {
-    const recordings = await getRecordings();
-    const recording = recordings.find((r) => r.id === id);
+    const metas = await getRecordingsMeta();
+    const meta = metas.find((r) => r.id === id);
     
-    if (recording) {
+    if (meta) {
       // Delete the audio file
       try {
-        const file = new File(recording.uri);
+        const file = new File(meta.uri);
         if (file.exists) {
           file.delete();
         }
@@ -111,9 +252,12 @@ export async function deleteRecording(id: string): Promise<void> {
         console.warn('Failed to delete audio file:', e);
       }
       
-      // Remove from storage
-      const filtered = recordings.filter((r) => r.id !== id);
-      await AsyncStorage.setItem(RECORDINGS_KEY, JSON.stringify(filtered));
+      // 删除分贝数据
+      await AsyncStorage.removeItem(getDecibelDataKey(id));
+      
+      // 从元数据列表中移除
+      const filtered = metas.filter((r) => r.id !== id);
+      await AsyncStorage.setItem(RECORDINGS_META_KEY, JSON.stringify(filtered));
     }
   } catch (error) {
     console.error('Failed to delete recording:', error);

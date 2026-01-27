@@ -21,7 +21,8 @@ import { useRecording } from '@/hooks/use-recording';
 import { Colors } from '@/constants/theme';
 import {
   Recording as RecordingData,
-  getRecordings,
+  RecordingMeta,
+  getRecordingsMeta,
   saveRecording,
   deleteRecording,
   formatDuration,
@@ -63,7 +64,7 @@ function getSeverityText(severity: string): string {
 }
 
 export default function HomeScreen() {
-  const [recordings, setRecordings] = useState<RecordingData[]>([]);
+  const [recordings, setRecordings] = useState<RecordingMeta[]>([]);
   const [threshold, setThreshold] = useState(SNORE_THRESHOLD_DB);
   
   const {
@@ -83,7 +84,7 @@ export default function HomeScreen() {
   const isDark = colorScheme === 'dark';
 
   const loadRecordings = useCallback(async () => {
-    const data = await getRecordings();
+    const data = await getRecordingsMeta();
     setRecordings(data);
   }, []);
 
@@ -225,7 +226,7 @@ export default function HomeScreen() {
     );
   };
 
-  const renderRecordingItem = ({ item }: { item: RecordingData }) => (
+  const renderRecordingItem = ({ item }: { item: RecordingMeta }) => (
     <Swipeable
       renderRightActions={(progress, dragX) => renderRightActions(progress, dragX, item.id)}
       rightThreshold={40}

@@ -32,15 +32,36 @@ export function DecibelChart({
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
 
-  // 计算图表数据
+  // 计算图表数据（降采样优化：最多显示 300 个数据点）
   const chartData = useMemo(() => {
-    if (data.length === 0) return { points: [], maxTime: 0 };
+    if (data.length === 0) return { points: [], maxTime: 0, maxDecibel: 0 };
 
     const maxTime = data[data.length - 1].timestamp;
-    const maxDecibel = Math.max(...data.map(d => d.decibel), threshold + 10);
+    
+    // 降采样：如果数据点太多，进行采样
+    const MAX_POINTS = 300; // 最多渲染 300 个点
+    let sampledData = data;
+    
+    if (data.length > MAX_POINTS) {
+      const step = Math.ceil(data.length / MAX_POINTS);
+      sampledData = [];
+      for (let i = 0; i < data.length; i += step) {
+        // 在每个采样区间内取最大值（保留打鼾峰值）
+        const end = Math.min(i + step, data.length);
+        let maxPoint = data[i];
+        for (let j = i + 1; j < end; j++) {
+          if (data[j].decibel > maxPoint.decibel) {
+            maxPoint = data[j];
+          }
+        }
+        sampledData.push(maxPoint);
+      }
+    }
+    
+    const maxDecibel = Math.max(...sampledData.map(d => d.decibel), threshold + 10);
     
     // 将数据点转换为坐标
-    const points = data.map((point) => ({
+    const points = sampledData.map((point) => ({
       x: (point.timestamp / maxTime) * width,
       y: height - (point.decibel / maxDecibel) * height * 0.9 - height * 0.05,
       decibel: point.decibel,
