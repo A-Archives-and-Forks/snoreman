@@ -23,9 +23,9 @@ interface AudioPlayerChartProps {
 }
 
 const DEFAULT_HEIGHT = 200;
-const TIME_BAR_HEIGHT = 24; // 底部时间栏高度
-const SLIDER_HEIGHT = 30; // 滑块区域高度
-const THRESHOLD_SLIDER_WIDTH = 40; // 阈值滑块宽度
+const TIME_BAR_HEIGHT = 10; // 底部时间栏高度
+const SLIDER_HEIGHT = 20; // 滑块区域高度
+const THRESHOLD_SLIDER_WIDTH = 7; // 阈值滑块宽度
 
 // 格式化为时间（时:分:秒）
 function formatTime(ms: number): string {
@@ -328,7 +328,7 @@ export function AudioPlayerChart({
         
         {/* 右侧垂直阈值滑块 */}
         <View style={[styles.thresholdSliderContainer, { height: chartHeight }]}>
-          <ThemedText style={styles.thresholdLabel}>{localThreshold}</ThemedText>
+          {/* <ThemedText style={styles.thresholdLabel}>{localThreshold}</ThemedText> */}
           <View style={styles.verticalSliderWrapper}>
             <Slider
               style={[styles.verticalSlider, { width: chartHeight, height: THRESHOLD_SLIDER_WIDTH }]}
@@ -344,7 +344,7 @@ export function AudioPlayerChart({
               inverted={true}
             />
           </View>
-          <ThemedText style={styles.thresholdUnit}>dB</ThemedText>
+          {/* <ThemedText style={styles.thresholdUnit}>dB</ThemedText> */}
         </View>
       </View>
       
@@ -383,7 +383,7 @@ const styles = StyleSheet.create({
   chartArea: {
     width: '100%',
     overflow: 'hidden',
-    borderRadius: 8,
+    // borderRadius: 8,
   },
   chartBackground: {
     position: 'absolute',
@@ -391,7 +391,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    borderRadius: 8,
+    // borderRadius: 8,
   },
   gridLine: {
     position: 'absolute',
@@ -442,11 +442,11 @@ const styles = StyleSheet.create({
   },
   playButton: {
     position: 'absolute',
-    left: 8,
-    bottom: 8,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    left: 0,
+    bottom: 15,
+    width: 50,
+    height: 50,
+    borderRadius: 25,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -473,6 +473,7 @@ const styles = StyleSheet.create({
   },
   sliderContainer: {
     width: '100%',
+    marginTop: -10,
   },
   slider: {
     width: '100%',
@@ -483,7 +484,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 4,
+    // paddingHorizontal: 4,
     marginTop: -4,
   },
   currentTimeText: {
@@ -503,7 +504,10 @@ const styles = StyleSheet.create({
     width: THRESHOLD_SLIDER_WIDTH,
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 4,
+    // paddingVertical: 4,
+    padding: 0,
+    margin: 0,
+    // marginLeft: -1,
   },
   thresholdLabel: {
     fontSize: 10,
