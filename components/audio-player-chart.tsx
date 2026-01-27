@@ -1,10 +1,10 @@
-import React, { useMemo, useState, useCallback, useRef } from 'react';
+import React, { useMemo, useState, useCallback } from 'react';
 import {
   View,
   StyleSheet,
   TouchableOpacity,
-  PanResponder,
   LayoutChangeEvent,
+  GestureResponderEvent,
 } from 'react-native';
 import Slider from '@react-native-community/slider';
 import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
@@ -53,13 +53,11 @@ export function AudioPlayerChart({
   const player = useAudioPlayer(uri ? { uri } : null);
   const status = useAudioPlayerStatus(player);
   
-  const [isDragging, setIsDragging] = useState(false);
-  const [dragPosition, setDragPosition] = useState<number>(0);
   const [isSliding, setIsSliding] = useState(false);
   const [sliderValue, setSliderValue] = useState<number>(0);
-  const [containerWidth, setContainerWidth] = useState<number>(300); // 默认值，会在 layout 时更新
+  const [containerWidth, setContainerWidth] = useState<number>(300);
   
-  // 图表区域尺寸（宽度自动适应容器）
+  // 图表区域尺寸
   const chartWidth = containerWidth;
   const chartHeight = height - TIME_BAR_HEIGHT - SLIDER_HEIGHT;
   
@@ -73,21 +71,14 @@ export function AudioPlayerChart({
   const maxTime = duration || (data.length > 0 ? data[data.length - 1].timestamp : 1);
   
   // 当前播放位置（毫秒）
-  const currentPosition = isDragging 
-    ? dragPosition 
-    : isSliding
+  const currentPosition = isSliding
     ? sliderValue
     : (status?.currentTime || 0) * 1000;
-  
-  // 用 ref 保存最新的值供 PanResponder 使用
-  const stateRef = useRef({ maxTime, chartWidth, player, status });
-  stateRef.current = { maxTime, chartWidth, player, status };
   
   // 降采样图表数据
   const chartData = useMemo(() => {
     if (data.length === 0) return { points: [], maxDecibel: 0 };
     
-    // 降采样
     const MAX_POINTS = 200;
     let sampledData = data;
     
@@ -118,13 +109,13 @@ export function AudioPlayerChart({
     return { points, maxDecibel };
   }, [data, chartWidth, threshold, maxTime]);
   
-  // 打鼾高亮区域
+  // 打鼾高亮区域（用于渲染和点击检测）
   const snoreRegions = useMemo(() => {
     if (snoreEvents.length === 0 || !maxTime) return [];
     
     return snoreEvents.map((event) => ({
       x: (event.startTime / maxTime) * chartWidth,
-      width: Math.max(4, ((event.endTime - event.startTime) / maxTime) * chartWidth),
+      width: Math.max(8, ((event.endTime - event.startTime) / maxTime) * chartWidth),
       event,
     }));
   }, [snoreEvents, maxTime, chartWidth]);
@@ -141,48 +132,53 @@ export function AudioPlayerChart({
     return chartHeight - (threshold / chartData.maxDecibel) * chartHeight * 0.85 - chartHeight * 0.05;
   }, [chartData.maxDecibel, chartHeight, threshold]);
   
-  // 手势处理
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: () => true,
-      onPanResponderGrant: (evt) => {
-        const { maxTime, chartWidth } = stateRef.current;
-        const x = evt.nativeEvent.locationX;
-        const clampedX = Math.max(0, Math.min(x, chartWidth));
-        const seekTime = (clampedX / chartWidth) * maxTime;
-        setIsDragging(true);
-        setDragPosition(seekTime);
-      },
-      onPanResponderMove: (evt) => {
-        const { maxTime, chartWidth } = stateRef.current;
-        const x = evt.nativeEvent.locationX;
-        const clampedX = Math.max(0, Math.min(x, chartWidth));
-        const seekTime = (clampedX / chartWidth) * maxTime;
-        setDragPosition(seekTime);
-      },
-      onPanResponderRelease: (evt) => {
-        const { maxTime, chartWidth, player, status } = stateRef.current;
-        const x = evt.nativeEvent.locationX;
-        const clampedX = Math.max(0, Math.min(x, chartWidth));
-        const seekTime = (clampedX / chartWidth) * maxTime;
-        
+  // 点击图表处理：找到最近的打鼾区域并跳转
+  const handleChartPress = useCallback((event: GestureResponderEvent) => {
+    if (snoreEvents.length === 0) return;
+    
+    const touchX = event.nativeEvent.locationX;
+    const touchTime = (touchX / chartWidth) * maxTime;
+    
+    // 检查是否点击在某个打鼾区域内
+    for (const region of snoreRegions) {
+      if (touchX >= region.x && touchX <= region.x + region.width) {
+        // 点击在打鼾区域内，跳转到该区域开始
         try {
-          player.seekTo(seekTime / 1000);
+          player.seekTo(region.event.startTime / 1000);
           if (!status?.playing) {
             player.play();
           }
         } catch (e) {
           console.error('Seek error:', e);
         }
-        
-        setIsDragging(false);
-      },
-      onPanResponderTerminate: () => {
-        setIsDragging(false);
-      },
-    })
-  ).current;
+        return;
+      }
+    }
+    
+    // 没有点击在打鼾区域内，找最近的打鼾区域
+    let nearestEvent: SnoreEvent | null = null;
+    let minDistance = Infinity;
+    
+    for (const event of snoreEvents) {
+      const eventCenterTime = (event.startTime + event.endTime) / 2;
+      const distance = Math.abs(touchTime - eventCenterTime);
+      if (distance < minDistance) {
+        minDistance = distance;
+        nearestEvent = event;
+      }
+    }
+    
+    if (nearestEvent) {
+      try {
+        player.seekTo(nearestEvent.startTime / 1000);
+        if (!status?.playing) {
+          player.play();
+        }
+      } catch (e) {
+        console.error('Seek error:', e);
+      }
+    }
+  }, [snoreEvents, snoreRegions, chartWidth, maxTime, player, status?.playing]);
   
   // 播放/暂停
   const handlePlayPause = useCallback(() => {
@@ -217,9 +213,10 @@ export function AudioPlayerChart({
   return (
     <View style={[styles.container, { height }]} onLayout={onLayout}>
       {/* 图表区域 */}
-      <View 
+      <TouchableOpacity 
         style={[styles.chartArea, { height: chartHeight }]}
-        {...panResponder.panHandlers}
+        onPress={handleChartPress}
+        activeOpacity={0.9}
       >
         {/* 背景 */}
         <View style={[styles.chartBackground, { backgroundColor: isDark ? '#1A1A1A' : '#F5F5F5' }]}>
@@ -245,7 +242,7 @@ export function AudioPlayerChart({
                 left: region.x,
                 width: region.width,
                 height: chartHeight,
-                backgroundColor: 'rgba(244, 67, 54, 0.15)',
+                backgroundColor: 'rgba(244, 67, 54, 0.2)',
               },
             ]}
             pointerEvents="none"
@@ -309,9 +306,9 @@ export function AudioPlayerChart({
             <View style={styles.playIcon} />
           )}
         </TouchableOpacity>
-      </View>
+      </TouchableOpacity>
       
-      {/* 时间滑块 - 紧贴图表底部 */}
+      {/* 时间滑块 */}
       <View style={styles.sliderContainer}>
         <Slider
           style={styles.slider}
@@ -439,7 +436,7 @@ const styles = StyleSheet.create({
   },
   slider: {
     width: '100%',
-    height: 36,
+    height: 30,
   },
   timeBar: {
     width: '100%',
@@ -447,7 +444,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 4,
-    marginTop: -6,
+    marginTop: -4,
   },
   currentTimeText: {
     fontSize: 12,
