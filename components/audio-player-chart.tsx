@@ -19,11 +19,13 @@ interface AudioPlayerChartProps {
   duration: number; // 总时长（毫秒）
   threshold?: number;
   height?: number;
+  onThresholdChange?: (value: number) => void;
 }
 
 const DEFAULT_HEIGHT = 200;
 const TIME_BAR_HEIGHT = 24; // 底部时间栏高度
 const SLIDER_HEIGHT = 30; // 滑块区域高度
+const THRESHOLD_SLIDER_WIDTH = 40; // 阈值滑块宽度
 
 // 格式化为时间（时:分:秒）
 function formatTime(ms: number): string {
@@ -45,6 +47,7 @@ export function AudioPlayerChart({
   duration,
   threshold = 45,
   height = DEFAULT_HEIGHT,
+  onThresholdChange,
 }: AudioPlayerChartProps) {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
@@ -56,9 +59,10 @@ export function AudioPlayerChart({
   const [isSliding, setIsSliding] = useState(false);
   const [sliderValue, setSliderValue] = useState<number>(0);
   const [containerWidth, setContainerWidth] = useState<number>(300);
+  const [localThreshold, setLocalThreshold] = useState<number>(threshold);
   
-  // 图表区域尺寸
-  const chartWidth = containerWidth;
+  // 图表区域尺寸（减去右侧阈值滑块宽度）
+  const chartWidth = containerWidth - THRESHOLD_SLIDER_WIDTH;
   const chartHeight = height - TIME_BAR_HEIGHT - SLIDER_HEIGHT;
   
   // 获取容器宽度
@@ -126,11 +130,22 @@ export function AudioPlayerChart({
     return (currentPosition / maxTime) * chartWidth;
   }, [currentPosition, maxTime, chartWidth]);
   
-  // 阈值线 Y 坐标
+  // 阈值线 Y 坐标（使用本地阈值）
   const thresholdY = useMemo(() => {
     if (!chartData.maxDecibel) return chartHeight * 0.5;
-    return chartHeight - (threshold / chartData.maxDecibel) * chartHeight * 0.85 - chartHeight * 0.05;
-  }, [chartData.maxDecibel, chartHeight, threshold]);
+    return chartHeight - (localThreshold / chartData.maxDecibel) * chartHeight * 0.85 - chartHeight * 0.05;
+  }, [chartData.maxDecibel, chartHeight, localThreshold]);
+  
+  // 阈值滑块改变
+  const handleThresholdChange = useCallback((value: number) => {
+    setLocalThreshold(value);
+  }, []);
+  
+  // 阈值滑块释放
+  const handleThresholdComplete = useCallback((value: number) => {
+    setLocalThreshold(value);
+    onThresholdChange?.(value);
+  }, [onThresholdChange]);
   
   // 点击图表处理：找到最近的打鼾区域并跳转
   const handleChartPress = useCallback((event: GestureResponderEvent) => {
@@ -212,104 +227,129 @@ export function AudioPlayerChart({
   
   return (
     <View style={[styles.container, { height }]} onLayout={onLayout}>
-      {/* 图表区域 */}
-      <TouchableOpacity 
-        style={[styles.chartArea, { height: chartHeight }]}
-        onPress={handleChartPress}
-        activeOpacity={0.9}
-      >
-        {/* 背景 */}
-        <View style={[styles.chartBackground, { backgroundColor: isDark ? '#1A1A1A' : '#F5F5F5' }]}>
-          {/* 网格线 */}
-          {[0.25, 0.5, 0.75].map((ratio) => (
-            <View
-              key={ratio}
-              style={[
-                styles.gridLine,
-                { top: chartHeight * ratio, backgroundColor: isDark ? '#333' : '#E0E0E0' },
-              ]}
-            />
-          ))}
-        </View>
-        
-        {/* 打鼾高亮区域 */}
-        {snoreRegions.map((region, index) => (
-          <View
-            key={index}
-            style={[
-              styles.snoreRegion,
-              {
-                left: region.x,
-                width: region.width,
-                height: chartHeight,
-                backgroundColor: 'rgba(244, 67, 54, 0.2)',
-              },
-            ]}
-            pointerEvents="none"
-          />
-        ))}
-        
-        {/* 阈值线 */}
-        <View
-          style={[
-            styles.thresholdLine,
-            { top: thresholdY, backgroundColor: '#FF9800' },
-          ]}
-          pointerEvents="none"
-        />
-        
-        {/* 波形 */}
-        {chartData.points.map((point, index) => {
-          const barHeight = Math.max(2, (point.decibel / (chartData.maxDecibel || 100)) * chartHeight * 0.85);
-          return (
+      {/* 图表和阈值滑块行 */}
+      <View style={styles.chartRow}>
+        {/* 图表区域 */}
+        <TouchableOpacity 
+          style={[styles.chartArea, { height: chartHeight, width: chartWidth }]}
+          onPress={handleChartPress}
+          activeOpacity={0.9}
+        >
+          {/* 背景 */}
+          <View style={[styles.chartBackground, { backgroundColor: isDark ? '#1A1A1A' : '#F5F5F5' }]}>
+            {/* 网格线 */}
+            {[0.25, 0.5, 0.75].map((ratio) => (
+              <View
+                key={ratio}
+                style={[
+                  styles.gridLine,
+                  { top: chartHeight * ratio, backgroundColor: isDark ? '#333' : '#E0E0E0' },
+                ]}
+              />
+            ))}
+          </View>
+          
+          {/* 打鼾高亮区域 */}
+          {snoreRegions.map((region, index) => (
             <View
               key={index}
               style={[
-                styles.waveformBar,
+                styles.snoreRegion,
                 {
-                  left: point.x - 1,
-                  height: barHeight,
-                  bottom: 0,
-                  backgroundColor: point.isAboveThreshold ? '#F44336' : '#6C63FF',
-                  opacity: point.isAboveThreshold ? 1 : 0.7,
+                  left: region.x,
+                  width: region.width,
+                  height: chartHeight,
+                  backgroundColor: 'rgba(244, 67, 54, 0.2)',
                 },
               ]}
               pointerEvents="none"
             />
-          );
-        })}
-        
-        {/* 当前播放位置指示器 */}
-        <View
-          style={[
-            styles.positionIndicator,
-            { left: Math.max(0, Math.min(currentPositionX - 1, chartWidth - 2)) },
-          ]}
-          pointerEvents="none"
-        >
-          <View style={styles.positionLine} />
-          <View style={styles.positionHandle} />
-        </View>
-        
-        {/* 播放按钮（左下角，在图表内） */}
-        <TouchableOpacity
-          style={[styles.playButton, { backgroundColor: 'rgba(108, 99, 255, 0.9)' }]}
-          onPress={handlePlayPause}
-          activeOpacity={0.8}
-        >
-          {status?.playing ? (
-            <View style={styles.pauseIcon}>
-              <View style={styles.pauseBar} />
-              <View style={styles.pauseBar} />
-            </View>
-          ) : (
-            <View style={styles.playIcon} />
-          )}
+          ))}
+          
+          {/* 阈值线 */}
+          <View
+            style={[
+              styles.thresholdLine,
+              { top: thresholdY, backgroundColor: '#FF9800' },
+            ]}
+            pointerEvents="none"
+          />
+          
+          {/* 波形 */}
+          {chartData.points.map((point, index) => {
+            const barHeight = Math.max(2, (point.decibel / (chartData.maxDecibel || 100)) * chartHeight * 0.85);
+            const isAboveLocalThreshold = point.decibel >= localThreshold;
+            return (
+              <View
+                key={index}
+                style={[
+                  styles.waveformBar,
+                  {
+                    left: point.x - 1,
+                    height: barHeight,
+                    bottom: 0,
+                    backgroundColor: isAboveLocalThreshold ? '#F44336' : '#6C63FF',
+                    opacity: isAboveLocalThreshold ? 1 : 0.7,
+                  },
+                ]}
+                pointerEvents="none"
+              />
+            );
+          })}
+          
+          {/* 当前播放位置指示器 */}
+          <View
+            style={[
+              styles.positionIndicator,
+              { left: Math.max(0, Math.min(currentPositionX - 1, chartWidth - 2)) },
+            ]}
+            pointerEvents="none"
+          >
+            <View style={styles.positionLine} />
+            <View style={styles.positionHandle} />
+          </View>
+          
+          {/* 播放按钮（左下角，在图表内） */}
+          <TouchableOpacity
+            style={[styles.playButton, { backgroundColor: 'rgba(108, 99, 255, 0.9)' }]}
+            onPress={handlePlayPause}
+            activeOpacity={0.8}
+          >
+            {status?.playing ? (
+              <View style={styles.pauseIcon}>
+                <View style={styles.pauseBar} />
+                <View style={styles.pauseBar} />
+              </View>
+            ) : (
+              <View style={styles.playIcon} />
+            )}
+          </TouchableOpacity>
         </TouchableOpacity>
-      </TouchableOpacity>
+        
+        {/* 右侧垂直阈值滑块 */}
+        <View style={[styles.thresholdSliderContainer, { height: chartHeight }]}>
+          <ThemedText style={styles.thresholdLabel}>{localThreshold}</ThemedText>
+          <View style={styles.verticalSliderWrapper}>
+            <Slider
+              style={[styles.verticalSlider, { width: chartHeight, height: THRESHOLD_SLIDER_WIDTH }]}
+              minimumValue={20}
+              maximumValue={80}
+              step={1}
+              value={localThreshold}
+              onValueChange={handleThresholdChange}
+              onSlidingComplete={handleThresholdComplete}
+              minimumTrackTintColor="#FF9800"
+              maximumTrackTintColor={isDark ? '#333' : '#E0E0E0'}
+              thumbTintColor="#FF9800"
+              inverted={true}
+            />
+          </View>
+          <ThemedText style={styles.thresholdUnit}>dB</ThemedText>
+        </View>
+      </View>
       
       {/* 时间滑块 */}
-      <View style={styles.sliderContainer}>
+      <View style={[styles.sliderContainer, { width: chartWidth }]}>
         <Slider
           style={styles.slider}
           minimumValue={0}
@@ -324,7 +364,7 @@ export function AudioPlayerChart({
       </View>
       
       {/* 底部时间栏 */}
-      <View style={styles.timeBar}>
+      <View style={[styles.timeBar, { width: chartWidth }]}>
         <ThemedText style={styles.currentTimeText}>
           {formatTime(currentPosition)}
         </ThemedText>
@@ -453,6 +493,34 @@ const styles = StyleSheet.create({
   },
   totalTimeText: {
     fontSize: 12,
+    opacity: 0.6,
+  },
+  chartRow: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+  },
+  thresholdSliderContainer: {
+    width: THRESHOLD_SLIDER_WIDTH,
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 4,
+  },
+  thresholdLabel: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#FF9800',
+  },
+  verticalSliderWrapper: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    transform: [{ rotate: '-90deg' }],
+  },
+  verticalSlider: {
+    // width and height set dynamically in component
+  },
+  thresholdUnit: {
+    fontSize: 10,
     opacity: 0.6,
   },
 });

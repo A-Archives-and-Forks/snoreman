@@ -7,7 +7,6 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
-import Slider from '@react-native-community/slider';
 import { setAudioModeAsync } from 'expo-audio';
 import { useLocalSearchParams, Stack, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -331,7 +330,7 @@ export default function RecordingDetailScreen() {
               </View>
             </View>
             
-            {/* 整合的播放器图表组件 */}
+            {/* 整合的播放器图表组件（包含右侧垂直阈值滑块） */}
             <AudioPlayerChart
               uri={recording.uri}
               data={decibelData}
@@ -339,48 +338,26 @@ export default function RecordingDetailScreen() {
               duration={recording.duration}
               threshold={threshold}
               height={200}
+              onThresholdChange={async (value) => {
+                setThreshold(value);
+                if (recording) {
+                  // 使用新阈值重新分析数据
+                  const newAnalysis = analyzeDecibelData(recording.decibelData, value);
+                  await updateRecording(recording.id, { 
+                    threshold: value,
+                    analysis: newAnalysis,
+                  });
+                  // 重新加载以更新显示
+                  await loadRecording();
+                }
+              }}
             />
-            <ThemedText style={styles.chartHint}>点击或拖动图表跳转播放</ThemedText>
-
-            {/* 阈值调节 */}
-            <View style={styles.thresholdContainer}>
-              <View style={styles.thresholdHeader}>
-                <ThemedText style={styles.thresholdLabel}>打鼾阈值</ThemedText>
-                <ThemedText style={styles.thresholdValue}>{threshold} dB</ThemedText>
-              </View>
-              <Slider
-                style={styles.slider}
-                minimumValue={20}
-                maximumValue={80}
-                step={1}
-                value={threshold}
-                onValueChange={setThreshold}
-                onSlidingComplete={async (value) => {
-                  if (recording) {
-                    // 使用新阈值重新分析数据
-                    const newAnalysis = analyzeDecibelData(recording.decibelData, value);
-                    await updateRecording(recording.id, { 
-                      threshold: value,
-                      analysis: newAnalysis,
-                    });
-                    // 重新加载以更新显示
-                    await loadRecording();
-                  }
-                }}
-                minimumTrackTintColor="#6C63FF"
-                maximumTrackTintColor={isDark ? '#333' : '#E0E0E0'}
-                thumbTintColor="#6C63FF"
-              />
-              <View style={styles.thresholdHints}>
-                <ThemedText style={styles.thresholdHint}>安静 20</ThemedText>
-                <ThemedText style={styles.thresholdHint}>80 嘈杂</ThemedText>
-              </View>
-            </View>
+            <ThemedText style={styles.chartHint}>点击图表跳转播放 | 右侧滑块调节阈值</ThemedText>
 
             {/* 动态统计 */}
             <View style={styles.dynamicStats}>
               <ThemedText style={styles.dynamicStatsText}>
-                当前阈值下检测到 <ThemedText style={styles.dynamicStatsHighlight}>{dynamicSnoreEvents.length}</ThemedText> 次打鼾事件
+                阈值 {threshold}dB | 检测到 <ThemedText style={styles.dynamicStatsHighlight}>{dynamicSnoreEvents.length}</ThemedText> 次打鼾
               </ThemedText>
             </View>
           </View>
@@ -918,40 +895,6 @@ const styles = StyleSheet.create({
     opacity: 0.5,
     textAlign: 'center',
     marginTop: 8,
-  },
-  thresholdContainer: {
-    marginTop: 16,
-    paddingTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(128, 128, 128, 0.2)',
-  },
-  thresholdHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  thresholdLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  thresholdValue: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#6C63FF',
-  },
-  slider: {
-    width: '100%',
-    height: 40,
-  },
-  thresholdHints: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: -8,
-  },
-  thresholdHint: {
-    fontSize: 12,
-    opacity: 0.5,
   },
   dynamicStats: {
     marginTop: 12,
