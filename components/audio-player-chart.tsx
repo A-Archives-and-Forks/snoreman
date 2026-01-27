@@ -2,10 +2,11 @@ import React, { useMemo, useState, useCallback, useRef } from 'react';
 import {
   View,
   StyleSheet,
-  Dimensions,
   TouchableOpacity,
   PanResponder,
+  LayoutChangeEvent,
 } from 'react-native';
+import Slider from '@react-native-community/slider';
 import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import { DecibelDataPoint, SnoreEvent } from '@/utils/storage';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -17,13 +18,12 @@ interface AudioPlayerChartProps {
   snoreEvents?: SnoreEvent[];
   duration: number; // 总时长（毫秒）
   threshold?: number;
-  width?: number;
   height?: number;
 }
 
-const DEFAULT_WIDTH = Dimensions.get('window').width - 48;
-const DEFAULT_HEIGHT = 160;
+const DEFAULT_HEIGHT = 200;
 const TIME_BAR_HEIGHT = 24; // 底部时间栏高度
+const SLIDER_HEIGHT = 30; // 滑块区域高度
 
 // 格式化为时间（时:分:秒）
 function formatTime(ms: number): string {
@@ -44,7 +44,6 @@ export function AudioPlayerChart({
   snoreEvents = [],
   duration,
   threshold = 45,
-  width = DEFAULT_WIDTH,
   height = DEFAULT_HEIGHT,
 }: AudioPlayerChartProps) {
   const colorScheme = useColorScheme();
@@ -56,10 +55,19 @@ export function AudioPlayerChart({
   
   const [isDragging, setIsDragging] = useState(false);
   const [dragPosition, setDragPosition] = useState<number>(0);
+  const [isSliding, setIsSliding] = useState(false);
+  const [sliderValue, setSliderValue] = useState<number>(0);
+  const [containerWidth, setContainerWidth] = useState<number>(300); // 默认值，会在 layout 时更新
   
-  // 图表区域尺寸（全宽）
-  const chartWidth = width;
-  const chartHeight = height - TIME_BAR_HEIGHT;
+  // 图表区域尺寸（宽度自动适应容器）
+  const chartWidth = containerWidth;
+  const chartHeight = height - TIME_BAR_HEIGHT - SLIDER_HEIGHT;
+  
+  // 获取容器宽度
+  const onLayout = useCallback((event: LayoutChangeEvent) => {
+    const { width } = event.nativeEvent.layout;
+    setContainerWidth(width);
+  }, []);
   
   // 使用 duration 作为最大时间
   const maxTime = duration || (data.length > 0 ? data[data.length - 1].timestamp : 1);
@@ -67,6 +75,8 @@ export function AudioPlayerChart({
   // 当前播放位置（毫秒）
   const currentPosition = isDragging 
     ? dragPosition 
+    : isSliding
+    ? sliderValue
     : (status?.currentTime || 0) * 1000;
   
   // 用 ref 保存最新的值供 PanResponder 使用
@@ -187,11 +197,28 @@ export function AudioPlayerChart({
     }
   }, [player, status?.playing]);
   
+  // 滑块改变
+  const handleSliderChange = useCallback((value: number) => {
+    setIsSliding(true);
+    setSliderValue(value);
+  }, []);
+  
+  // 滑块释放
+  const handleSliderComplete = useCallback((value: number) => {
+    try {
+      player.seekTo(value / 1000);
+      setIsSliding(false);
+    } catch (e) {
+      console.error('Slider seek error:', e);
+      setIsSliding(false);
+    }
+  }, [player]);
+  
   return (
-    <View style={[styles.container, { width, height }]}>
+    <View style={[styles.container, { height }]} onLayout={onLayout}>
       {/* 图表区域 */}
       <View 
-        style={[styles.chartArea, { width: chartWidth, height: chartHeight }]}
+        style={[styles.chartArea, { height: chartHeight }]}
         {...panResponder.panHandlers}
       >
         {/* 背景 */}
@@ -284,8 +311,23 @@ export function AudioPlayerChart({
         </TouchableOpacity>
       </View>
       
+      {/* 时间滑块 - 紧贴图表底部 */}
+      <View style={styles.sliderContainer}>
+        <Slider
+          style={styles.slider}
+          minimumValue={0}
+          maximumValue={maxTime}
+          value={currentPosition}
+          onValueChange={handleSliderChange}
+          onSlidingComplete={handleSliderComplete}
+          minimumTrackTintColor="#6C63FF"
+          maximumTrackTintColor={isDark ? '#333' : '#E0E0E0'}
+          thumbTintColor="#6C63FF"
+        />
+      </View>
+      
       {/* 底部时间栏 */}
-      <View style={[styles.timeBar, { width: chartWidth }]}>
+      <View style={styles.timeBar}>
         <ThemedText style={styles.currentTimeText}>
           {formatTime(currentPosition)}
         </ThemedText>
@@ -299,10 +341,10 @@ export function AudioPlayerChart({
 
 const styles = StyleSheet.create({
   container: {
-    position: 'relative',
+    width: '100%',
   },
   chartArea: {
-    position: 'relative',
+    width: '100%',
     overflow: 'hidden',
     borderRadius: 8,
   },
@@ -392,12 +434,20 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderRadius: 1,
   },
+  sliderContainer: {
+    width: '100%',
+  },
+  slider: {
+    width: '100%',
+    height: 36,
+  },
   timeBar: {
+    width: '100%',
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 4,
-    paddingTop: 6,
+    marginTop: -6,
   },
   currentTimeText: {
     fontSize: 12,
