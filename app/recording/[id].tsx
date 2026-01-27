@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, useMemo } from 'react';
+import { useCallback, useEffect, useState, useMemo } from 'react';
 import {
   View,
   StyleSheet,
@@ -6,10 +6,9 @@ import {
   ScrollView,
   Alert,
   ActivityIndicator,
-  Platform,
 } from 'react-native';
 import Slider from '@react-native-community/slider';
-import { useAudioPlayer, useAudioPlayerStatus, setAudioModeAsync } from 'expo-audio';
+import { setAudioModeAsync } from 'expo-audio';
 import { useLocalSearchParams, Stack, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Sharing from 'expo-sharing';
@@ -17,7 +16,7 @@ import { File, Paths } from 'expo-file-system';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { DecibelChart } from '@/components/decibel-chart';
+import { AudioPlayerChart } from '@/components/audio-player-chart';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { Colors } from '@/constants/theme';
 import {
@@ -67,7 +66,6 @@ export default function RecordingDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const [recording, setRecording] = useState<Recording | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [isPlayerReady, setIsPlayerReady] = useState(false);
   const [threshold, setThreshold] = useState(SNORE_THRESHOLD_DB);
 
   const router = useRouter();
@@ -75,10 +73,6 @@ export default function RecordingDetailScreen() {
   const colors = Colors[colorScheme ?? 'light'];
   const insets = useSafeAreaInsets();
   const isDark = colorScheme === 'dark';
-
-  // 音频播放器 - 只在有录音 URI 时初始化
-  const player = useAudioPlayer(recording?.uri ? { uri: recording.uri } : null);
-  const status = useAudioPlayerStatus(player);
 
   // 基于当前阈值动态计算打鼾事件
   const dynamicSnoreEvents = useMemo(() => {
@@ -166,55 +160,6 @@ export default function RecordingDetailScreen() {
     setupAudioMode();
   }, []);
 
-  // 检查播放器是否准备好
-  useEffect(() => {
-    if (recording?.uri && player) {
-      setIsPlayerReady(true);
-    }
-    return () => {
-      setIsPlayerReady(false);
-    };
-  }, [recording?.uri, player]);
-
-  // 清理播放器
-  useEffect(() => {
-    return () => {
-      if (isPlayerReady) {
-        try {
-          player.pause();
-        } catch (e) {
-          // 忽略清理时的错误
-        }
-      }
-    };
-  }, [isPlayerReady, player]);
-
-  const handlePlayPause = () => {
-    if (!isPlayerReady) return;
-    try {
-      if (status.playing) {
-        player.pause();
-      } else {
-        player.play();
-      }
-    } catch (e) {
-      console.error('Playback error:', e);
-    }
-  };
-
-  // 跳转到指定时间点并播放
-  const handleSeekToEvent = async (event: SnoreEvent) => {
-    if (!isPlayerReady) return;
-    try {
-      // 跳转到事件开始时间前0.5秒，确保能听到完整打鼾声
-      const seekTime = Math.max(0, event.startTime / 1000 - 0.5);
-      await player.seekTo(seekTime);
-      player.play();
-    } catch (e) {
-      console.error('Seek error:', e);
-    }
-  };
-
   const handleAnalyze = async () => {
     if (!recording || isAnalyzing) return;
 
@@ -247,14 +192,6 @@ export default function RecordingDetailScreen() {
         style: 'destructive',
         onPress: async () => {
           try {
-            // 先暂停播放
-            if (isPlayerReady) {
-              try {
-                player.pause();
-              } catch (e) {
-                // 忽略错误
-              }
-            }
             await deleteRecording(recording.id);
             router.back();
           } catch (error) {
@@ -326,7 +263,6 @@ export default function RecordingDetailScreen() {
   const analysis = recording.analysis;
   const decibelData = recording.decibelData || [];
   const hasDecibelData = decibelData.length > 0;
-  const playbackPosition = (status?.currentTime || 0) * 1000; // 转换为毫秒
 
   return (
     <ThemedView style={styles.container}>
@@ -371,7 +307,7 @@ export default function RecordingDetailScreen() {
           </View>
         </View>
 
-        {/* Decibel Chart */}
+        {/* 播放器和分贝曲线整合组件 */}
         {hasDecibelData ? (
           <View
             style={[
@@ -379,7 +315,7 @@ export default function RecordingDetailScreen() {
               { backgroundColor: isDark ? '#1E1E1E' : '#F8F9FA' },
             ]}
           >
-            <ThemedText style={styles.cardTitle}>分贝曲线</ThemedText>
+            <ThemedText style={styles.cardTitle}>分贝曲线与播放</ThemedText>
             <View style={styles.chartLegend}>
               <View style={styles.legendItem}>
                 <View style={[styles.legendDot, { backgroundColor: '#6C63FF' }]} />
@@ -394,17 +330,17 @@ export default function RecordingDetailScreen() {
                 <ThemedText style={styles.legendText}>阈值线</ThemedText>
               </View>
             </View>
-            <DecibelChart
+            
+            {/* 整合的播放器图表组件 */}
+            <AudioPlayerChart
+              uri={recording.uri}
               data={decibelData}
               snoreEvents={dynamicSnoreEvents}
-              height={150}
-              showThreshold={true}
-              highlightSnoring={true}
-              currentPosition={status?.playing ? playbackPosition : undefined}
+              duration={recording.duration}
               threshold={threshold}
-              onSnoreEventPress={handleSeekToEvent}
+              height={200}
             />
-            <ThemedText style={styles.chartHint}>点击红色区域可跳转播放</ThemedText>
+            <ThemedText style={styles.chartHint}>点击或拖动图表跳转播放</ThemedText>
 
             {/* 阈值调节 */}
             <View style={styles.thresholdContainer}>
@@ -466,49 +402,6 @@ export default function RecordingDetailScreen() {
             </View>
           </View>
         )}
-
-        {/* Playback Controls */}
-        <View
-          style={[
-            styles.card,
-            { backgroundColor: isDark ? '#1E1E1E' : '#F8F9FA' },
-          ]}
-        >
-          <ThemedText style={styles.cardTitle}>播放控制</ThemedText>
-          <View style={styles.playbackContainer}>
-            <TouchableOpacity
-              style={[styles.playButton, { backgroundColor: '#6C63FF' }]}
-              onPress={handlePlayPause}
-              activeOpacity={0.8}
-              disabled={!isPlayerReady}
-            >
-              {status?.playing ? (
-                <View style={styles.pauseIcon}>
-                  <View style={styles.pauseBar} />
-                  <View style={styles.pauseBar} />
-                </View>
-              ) : (
-                <View style={styles.playIcon} />
-              )}
-            </TouchableOpacity>
-            <View style={styles.playbackInfo}>
-              <ThemedText style={styles.playbackTime}>
-                {formatDuration(playbackPosition)} / {formatDuration(recording.duration)}
-              </ThemedText>
-              <View style={styles.progressBar}>
-                <View
-                  style={[
-                    styles.progressFill,
-                    {
-                      width: `${recording.duration > 0 ? (playbackPosition / recording.duration) * 100 : 0}%`,
-                      backgroundColor: '#6C63FF',
-                    },
-                  ]}
-                />
-              </View>
-            </View>
-          </View>
-        </View>
 
         {/* Analysis Section */}
         <View
@@ -647,14 +540,12 @@ export default function RecordingDetailScreen() {
             <ThemedText style={styles.cardTitle}>
               打鼾事件 ({dynamicSnoreEvents.length})
             </ThemedText>
-            <ThemedText style={styles.eventsHint}>点击事件可跳转播放</ThemedText>
+            <ThemedText style={styles.eventsHint}>在上方图表中点击红色区域可跳转播放</ThemedText>
             <View style={styles.eventsContainer}>
               {dynamicSnoreEvents.slice(0, 10).map((event, index) => (
-                <TouchableOpacity 
+                <View 
                   key={index} 
                   style={styles.eventItem}
-                  onPress={() => handleSeekToEvent(event)}
-                  activeOpacity={0.7}
                 >
                   <View style={styles.eventTime}>
                     <ThemedText style={styles.eventTimeText}>
@@ -674,11 +565,8 @@ export default function RecordingDetailScreen() {
                         {event.maxDecibel}dB
                       </ThemedText>
                     </View>
-                    <View style={styles.eventPlayIcon}>
-                      <ThemedText style={styles.eventPlayIconText}>▶</ThemedText>
-                    </View>
                   </View>
-                </TouchableOpacity>
+                </View>
               ))}
               {dynamicSnoreEvents.length > 10 && (
                 <ThemedText style={styles.moreEvents}>
