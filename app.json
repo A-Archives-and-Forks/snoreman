@@ -14,7 +14,6 @@
       "infoPlist": {
         "NSMicrophoneUsageDescription": "需要使用麦克风来录制睡眠时的音频，以分析打鼾情况",
         "UIBackgroundModes": [
-          "audio",
           "audio"
         ],
         "ITSAppUsesNonExemptEncryption": false

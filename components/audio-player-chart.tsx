@@ -130,10 +130,15 @@ export function AudioPlayerChart({
     return (currentPosition / maxTime) * chartWidth;
   }, [currentPosition, maxTime, chartWidth]);
   
-  // 阈值线 Y 坐标（使用本地阈值）
+  // 阈值线 Y 坐标（与波形和滑块对齐）
+  // 波形使用 chartHeight * 0.85，底部留白 chartHeight * 0.05
+  // 所以有效高度是 0.85，从底部 0.05 开始
   const thresholdY = useMemo(() => {
     if (!chartData.maxDecibel) return chartHeight * 0.5;
-    return chartHeight - (localThreshold / chartData.maxDecibel) * chartHeight * 0.85 - chartHeight * 0.05;
+    // 计算在有效区域内的位置（0.85 比例）
+    const ratioInEffectiveArea = localThreshold / chartData.maxDecibel;
+    // 从底部开始：底部留白 + 有效区域内的高度
+    return chartHeight - (chartHeight * 0.05 + ratioInEffectiveArea * chartHeight * 0.85);
   }, [chartData.maxDecibel, chartHeight, localThreshold]);
   
   // 阈值滑块改变
@@ -230,25 +235,25 @@ export function AudioPlayerChart({
       {/* 图表和阈值滑块行 */}
       <View style={styles.chartRow}>
         {/* 图表区域 */}
-        <TouchableOpacity 
+        <TouchableOpacity
           style={[styles.chartArea, { height: chartHeight, width: chartWidth }]}
           onPress={handleChartPress}
           activeOpacity={0.9}
         >
           {/* 背景 */}
           <View style={[styles.chartBackground, { backgroundColor: isDark ? '#1A1A1A' : '#F5F5F5' }]}>
-            {/* 网格线 */}
-            {[0.25, 0.5, 0.75].map((ratio) => (
+            {/* 网格线 - 简化为3条线 */}
+            {[0.33, 0.66].map((ratio) => (
               <View
                 key={ratio}
                 style={[
                   styles.gridLine,
-                  { top: chartHeight * ratio, backgroundColor: isDark ? '#333' : '#E0E0E0' },
+                  { top: chartHeight * ratio, backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)' },
                 ]}
               />
             ))}
           </View>
-          
+
           {/* 打鼾高亮区域 */}
           {snoreRegions.map((region, index) => (
             <View
@@ -265,7 +270,7 @@ export function AudioPlayerChart({
               pointerEvents="none"
             />
           ))}
-          
+
           {/* 阈值线 */}
           <View
             style={[
@@ -274,7 +279,7 @@ export function AudioPlayerChart({
             ]}
             pointerEvents="none"
           />
-          
+
           {/* 波形 */}
           {chartData.points.map((point, index) => {
             const barHeight = Math.max(2, (point.decibel / (chartData.maxDecibel || 100)) * chartHeight * 0.85);
@@ -289,14 +294,14 @@ export function AudioPlayerChart({
                     height: barHeight,
                     bottom: 0,
                     backgroundColor: isAboveLocalThreshold ? '#F44336' : '#6C63FF',
-                    opacity: isAboveLocalThreshold ? 1 : 0.7,
+                    opacity: isAboveLocalThreshold ? 1 : 0.6,
                   },
                 ]}
                 pointerEvents="none"
               />
             );
           })}
-          
+
           {/* 当前播放位置指示器 */}
           <View
             style={[
@@ -308,10 +313,10 @@ export function AudioPlayerChart({
             <View style={styles.positionLine} />
             <View style={styles.positionHandle} />
           </View>
-          
+
           {/* 播放按钮（左下角，在图表内） */}
           <TouchableOpacity
-            style={[styles.playButton, { backgroundColor: 'rgba(108, 99, 255, 0.9)' }]}
+            style={styles.playButton}
             onPress={handlePlayPause}
             activeOpacity={0.8}
           >
@@ -325,15 +330,14 @@ export function AudioPlayerChart({
             )}
           </TouchableOpacity>
         </TouchableOpacity>
-        
+
         {/* 右侧垂直阈值滑块 */}
         <View style={[styles.thresholdSliderContainer, { height: chartHeight }]}>
-          {/* <ThemedText style={styles.thresholdLabel}>{localThreshold}</ThemedText> */}
           <View style={styles.verticalSliderWrapper}>
             <Slider
               style={[styles.verticalSlider, { width: chartHeight, height: THRESHOLD_SLIDER_WIDTH }]}
-              minimumValue={20}
-              maximumValue={80}
+              minimumValue={0}
+              maximumValue={chartData.maxDecibel || 100}
               step={1}
               value={localThreshold}
               onValueChange={handleThresholdChange}
@@ -344,25 +348,26 @@ export function AudioPlayerChart({
               inverted={true}
             />
           </View>
-          {/* <ThemedText style={styles.thresholdUnit}>dB</ThemedText> */}
         </View>
       </View>
-      
+
       {/* 时间滑块 */}
-      <View style={[styles.sliderContainer, { width: chartWidth }]}>
-        <Slider
-          style={styles.slider}
-          minimumValue={0}
-          maximumValue={maxTime}
-          value={currentPosition}
-          onValueChange={handleSliderChange}
-          onSlidingComplete={handleSliderComplete}
-          minimumTrackTintColor="#6C63FF"
-          maximumTrackTintColor={isDark ? '#333' : '#E0E0E0'}
-          thumbTintColor="#6C63FF"
-        />
+      <View style={styles.sliderContainer}>
+        <View style={{ width: chartWidth }}>
+          <Slider
+            style={styles.slider}
+            minimumValue={0}
+            maximumValue={maxTime}
+            value={currentPosition}
+            onValueChange={handleSliderChange}
+            onSlidingComplete={handleSliderComplete}
+            minimumTrackTintColor="#6C63FF"
+            maximumTrackTintColor={isDark ? '#333' : '#E0E0E0'}
+            thumbTintColor="#6C63FF"
+          />
+        </View>
       </View>
-      
+
       {/* 底部时间栏 */}
       <View style={[styles.timeBar, { width: chartWidth }]}>
         <ThemedText style={styles.currentTimeText}>
@@ -425,16 +430,12 @@ const styles = StyleSheet.create({
   positionLine: {
     flex: 1,
     width: 2,
-    backgroundColor: '#FFFFFF',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.5,
-    shadowRadius: 2,
+    backgroundColor: '#6C63FF',
   },
   positionHandle: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
     backgroundColor: '#FFFFFF',
     borderWidth: 2,
     borderColor: '#6C63FF',
@@ -442,34 +443,40 @@ const styles = StyleSheet.create({
   },
   playButton: {
     position: 'absolute',
-    left: 0,
-    bottom: 15,
-    width: 50,
-    height: 50,
-    borderRadius: 25,
+    left: 12,
+    bottom: 12,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 4,
   },
   playIcon: {
     width: 0,
     height: 0,
-    borderLeftWidth: 10,
-    borderTopWidth: 7,
-    borderBottomWidth: 7,
-    borderLeftColor: '#FFFFFF',
+    borderLeftWidth: 14,
+    borderTopWidth: 9,
+    borderBottomWidth: 9,
+    borderLeftColor: '#6C63FF',
     borderTopColor: 'transparent',
     borderBottomColor: 'transparent',
-    marginLeft: 2,
+    marginLeft: 4,
   },
   pauseIcon: {
     flexDirection: 'row',
-    gap: 3,
+    gap: 4,
   },
   pauseBar: {
-    width: 3,
-    height: 12,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 1,
+    width: 4,
+    height: 16,
+    backgroundColor: '#6C63FF',
+    borderRadius: 2,
   },
   sliderContainer: {
     width: '100%',
@@ -504,15 +511,8 @@ const styles = StyleSheet.create({
     width: THRESHOLD_SLIDER_WIDTH,
     alignItems: 'center',
     justifyContent: 'space-between',
-    // paddingVertical: 4,
     padding: 0,
     margin: 0,
-    // marginLeft: -1,
-  },
-  thresholdLabel: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: '#FF9800',
   },
   verticalSliderWrapper: {
     flex: 1,
@@ -522,9 +522,5 @@ const styles = StyleSheet.create({
   },
   verticalSlider: {
     // width and height set dynamically in component
-  },
-  thresholdUnit: {
-    fontSize: 10,
-    opacity: 0.6,
   },
 });

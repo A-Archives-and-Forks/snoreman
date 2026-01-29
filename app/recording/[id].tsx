@@ -232,23 +232,23 @@ export default function RecordingDetailScreen() {
               { backgroundColor: isDark ? '#1E1E1E' : '#F8F9FA' },
             ]}
           >
-            <ThemedText style={styles.cardTitle}>分贝曲线与播放</ThemedText>
-            <View style={styles.chartLegend}>
+            {/* 图例说明 */}
+            <View style={styles.legendRow}>
               <View style={styles.legendItem}>
                 <View style={[styles.legendDot, { backgroundColor: '#6C63FF' }]} />
                 <ThemedText style={styles.legendText}>正常</ThemedText>
               </View>
               <View style={styles.legendItem}>
                 <View style={[styles.legendDot, { backgroundColor: '#F44336' }]} />
-                <ThemedText style={styles.legendText}>超阈值 ({'>='}{threshold}dB)</ThemedText>
+                <ThemedText style={styles.legendText}>超阈值</ThemedText>
               </View>
               <View style={styles.legendItem}>
                 <View style={[styles.legendLine, { backgroundColor: '#FF9800' }]} />
                 <ThemedText style={styles.legendText}>阈值线</ThemedText>
               </View>
             </View>
-            
-            {/* 整合的播放器图表组件（包含右侧垂直阈值滑块） */}
+
+            {/* 图表区域 */}
             <AudioPlayerChart
               uri={recording.uri}
               data={decibelData}
@@ -259,24 +259,36 @@ export default function RecordingDetailScreen() {
               onThresholdChange={async (value) => {
                 setThreshold(value);
                 if (recording) {
-                  // 使用新阈值重新分析数据
                   const newAnalysis = analyzeDecibelData(recording.decibelData, value);
-                  await updateRecording(recording.id, { 
+                  await updateRecording(recording.id, {
                     threshold: value,
                     analysis: newAnalysis,
                   });
-                  // 重新加载以更新显示
                   await loadRecording();
                 }
               }}
             />
-            <ThemedText style={styles.chartHint}>点击图表跳转播放 | 右侧滑块调节阈值</ThemedText>
 
-            {/* 动态统计 */}
-            <View style={styles.dynamicStats}>
-              <ThemedText style={styles.dynamicStatsText}>
-                阈值 {threshold}dB | 检测到 <ThemedText style={styles.dynamicStatsHighlight}>{dynamicSnoreEvents.length}</ThemedText> 次打鼾
-              </ThemedText>
+            {/* 分析说明 */}
+            <ThemedText style={styles.analysisText}>
+              点击红色区域可跳转到打鼾片段播放，拖动右侧滑块调节阈值
+            </ThemedText>
+
+            {/* 统计信息 */}
+            <View style={styles.statsRow}>
+              <View style={styles.statItem}>
+                <ThemedText style={[styles.statValue, { color: '#F44336' }]}>
+                  {dynamicSnoreEvents.length}
+                </ThemedText>
+                <ThemedText style={styles.statLabel}>打鼾次数</ThemedText>
+              </View>
+              <View style={styles.statDivider} />
+              <View style={styles.statItem}>
+                <ThemedText style={styles.statValue}>
+                  {threshold}
+                </ThemedText>
+                <ThemedText style={styles.statLabel}>阈值 (dB)</ThemedText>
+              </View>
             </View>
           </View>
         ) : (
@@ -286,7 +298,6 @@ export default function RecordingDetailScreen() {
               { backgroundColor: isDark ? '#1E1E1E' : '#F8F9FA' },
             ]}
           >
-            <ThemedText style={styles.cardTitle}>分贝曲线</ThemedText>
             <View style={styles.noDataContainer}>
               <ThemedText style={styles.noDataText}>
                 此录音没有分贝数据
@@ -298,23 +309,24 @@ export default function RecordingDetailScreen() {
           </View>
         )}
 
-        {/* Delete Button */}
-        <TouchableOpacity
-          style={styles.deleteButton}
-          onPress={handleDelete}
-          activeOpacity={0.8}
-        >
-          <ThemedText style={styles.deleteButtonText}>删除录音</ThemedText>
-        </TouchableOpacity>
+        {/* 操作按钮 */}
+        <View style={styles.actionsContainer}>
+          <TouchableOpacity
+            style={styles.exportButton}
+            onPress={handleExport}
+            activeOpacity={0.8}
+          >
+            <ThemedText style={styles.exportButtonText}>导出录音</ThemedText>
+          </TouchableOpacity>
 
-        {/* Export Button */}
-        <TouchableOpacity
-          style={styles.exportButton}
-          onPress={handleExport}
-          activeOpacity={0.8}
-        >
-          <ThemedText style={styles.exportButtonText}>导出录音</ThemedText>
-        </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.deleteButton}
+            onPress={handleDelete}
+            activeOpacity={0.8}
+          >
+            <ThemedText style={styles.deleteButtonText}>删除</ThemedText>
+          </TouchableOpacity>
+        </View>
       </ScrollView>
     </ThemedView>
   );
@@ -335,46 +347,28 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   card: {
-    borderRadius: 16,
-    padding: 20,
+    borderRadius: 20,
+    padding: 16,
     marginBottom: 16,
   },
-  cardTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    marginBottom: 16,
-  },
-  noDataContainer: {
-    alignItems: 'center',
-    paddingVertical: 24,
-  },
-  noDataText: {
-    fontSize: 16,
-    opacity: 0.5,
-  },
-  noDataSubtext: {
-    fontSize: 14,
-    opacity: 0.4,
-    marginTop: 8,
-  },
-  chartLegend: {
+  legendRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 24,
     marginBottom: 12,
-    gap: 16,
   },
   legendItem: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   legendDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
     marginRight: 6,
   },
   legendLine: {
-    width: 16,
+    width: 14,
     height: 3,
     borderRadius: 1,
     marginRight: 6,
@@ -383,53 +377,81 @@ const styles = StyleSheet.create({
     fontSize: 12,
     opacity: 0.7,
   },
+  analysisText: {
+    fontSize: 13,
+    opacity: 0.6,
+    textAlign: 'center',
+    marginTop: 8,
+    marginBottom: 4,
+  },
+  noDataContainer: {
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  noDataText: {
+    fontSize: 16,
+    opacity: 0.6,
+  },
+  noDataSubtext: {
+    fontSize: 13,
+    opacity: 0.4,
+    marginTop: 6,
+  },
+  statsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-evenly',
+    alignItems: 'center',
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(128, 128, 128, 0.1)',
+  },
+  statItem: {
+    alignItems: 'center',
+  },
+  statValue: {
+    fontSize: 24,
+    fontWeight: '700',
+  },
+  statLabel: {
+    fontSize: 12,
+    opacity: 0.6,
+    marginTop: 4,
+  },
+  statDivider: {
+    width: 1,
+    height: 30,
+    backgroundColor: 'rgba(128, 128, 128, 0.2)',
+  },
+  actionsContainer: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 8,
+  },
   deleteButton: {
-    backgroundColor: 'rgba(244, 67, 54, 0.1)',
-    paddingVertical: 16,
+    flex: 1,
+    backgroundColor: 'transparent',
+    paddingVertical: 14,
     borderRadius: 12,
     alignItems: 'center',
-    marginTop: 8,
     borderWidth: 1,
     borderColor: '#F44336',
   },
   deleteButtonText: {
     color: '#F44336',
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
   },
   exportButton: {
-    backgroundColor: 'rgba(108, 99, 255, 0.1)',
-    paddingVertical: 16,
+    flex: 2,
+    backgroundColor: '#6C63FF',
+    paddingVertical: 14,
     borderRadius: 12,
     alignItems: 'center',
-    marginTop: 12,
-    borderWidth: 1,
-    borderColor: '#6C63FF',
   },
   exportButtonText: {
-    color: '#6C63FF',
-    fontSize: 16,
+    color: '#FFFFFF',
+    fontSize: 15,
     fontWeight: '600',
-  },
-  chartHint: {
-    fontSize: 12,
-    opacity: 0.5,
-    textAlign: 'center',
-    marginTop: 8,
-  },
-  dynamicStats: {
-    marginTop: 12,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(128, 128, 128, 0.2)',
-    alignItems: 'center',
-  },
-  dynamicStatsText: {
-    fontSize: 14,
-    opacity: 0.8,
-  },
-  dynamicStatsHighlight: {
-    fontWeight: '700',
-    color: '#F44336',
   },
 });
