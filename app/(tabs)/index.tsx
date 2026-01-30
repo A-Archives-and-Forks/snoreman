@@ -218,7 +218,13 @@ export default function HomeScreen() {
     >
       <TouchableOpacity
         style={[styles.recordingItem, { backgroundColor: isDark ? '#1E1E1E' : '#F8F9FA' }]}
-        onPress={() => router.push(`/recording/${item.id}` as any)}
+        onPress={() => {
+          if (isRecording) {
+            Alert.alert('提示', '请先结束当前录音，再查看录音详情');
+            return;
+          }
+          router.push(`/recording/${item.id}` as any);
+        }}
         onLongPress={() => handleDelete(item.id)}
         activeOpacity={0.7}
       >
