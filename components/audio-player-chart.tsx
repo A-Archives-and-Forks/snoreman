@@ -181,7 +181,27 @@ export function AudioPlayerChart({
       console.error('PlayPause error:', e);
     }
   }, [player, status?.playing]);
-  
+
+  // 快退5秒
+  const handleSkipBackward = useCallback(() => {
+    try {
+      const newPosition = Math.max(0, currentPosition - 5000);
+      player.seekTo(newPosition / 1000);
+    } catch (e) {
+      console.error('Skip backward error:', e);
+    }
+  }, [player, currentPosition]);
+
+  // 快进5秒
+  const handleSkipForward = useCallback(() => {
+    try {
+      const newPosition = Math.min(maxTime, currentPosition + 5000);
+      player.seekTo(newPosition / 1000);
+    } catch (e) {
+      console.error('Skip forward error:', e);
+    }
+  }, [player, currentPosition, maxTime]);
+
   // 滑块改变
   const handleSliderChange = useCallback((value: number) => {
     setIsSliding(true);
@@ -272,21 +292,6 @@ export function AudioPlayerChart({
             <View style={styles.positionHandle} />
           </View>
 
-          {/* 播放按钮（左下角，在图表内） */}
-          <TouchableOpacity
-            style={styles.playButton}
-            onPress={handlePlayPause}
-            activeOpacity={0.8}
-          >
-            {status?.playing ? (
-              <View style={styles.pauseIcon}>
-                <View style={styles.pauseBar} />
-                <View style={styles.pauseBar} />
-              </View>
-            ) : (
-              <View style={styles.playIcon} />
-            )}
-          </TouchableOpacity>
         </TouchableOpacity>
 
         {/* 右侧垂直阈值滑块 */}
@@ -328,7 +333,7 @@ export function AudioPlayerChart({
         </View>
       </View>
 
-      {/* 底部时间栏 */}
+      {/* 时间指示 */}
       <View style={[styles.timeBar, { width: chartWidth }]}>
         <ThemedText style={styles.currentTimeText}>
           {formatTime(currentPosition)}
@@ -336,6 +341,40 @@ export function AudioPlayerChart({
         <ThemedText style={styles.totalTimeText}>
           {formatTime(duration)}
         </ThemedText>
+      </View>
+
+      {/* 播放控制按钮 */}
+      <View style={[styles.controlsRow, { width: chartWidth }]}>
+        <TouchableOpacity
+          style={styles.controlButton}
+          onPress={handleSkipBackward}
+          activeOpacity={0.8}
+        >
+          <ThemedText style={styles.controlIcon}>« 5s</ThemedText>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.controlButton, styles.playControlButton]}
+          onPress={handlePlayPause}
+          activeOpacity={0.8}
+        >
+          {status?.playing ? (
+            <View style={styles.controlPauseIcon}>
+              <View style={styles.controlPauseBar} />
+              <View style={styles.controlPauseBar} />
+            </View>
+          ) : (
+            <View style={styles.controlPlayIcon} />
+          )}
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.controlButton}
+          onPress={handleSkipForward}
+          activeOpacity={0.8}
+        >
+          <ThemedText style={styles.controlIcon}>5s »</ThemedText>
+        </TouchableOpacity>
       </View>
     </View>
   );
@@ -396,40 +435,51 @@ const styles = StyleSheet.create({
     borderColor: '#6C63FF',
     marginTop: -2,
   },
-  playButton: {
-    position: 'absolute',
-    left: 12,
-    bottom: 12,
+  controlsRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 20,
+    marginTop: 8,
+    marginBottom: 4,
+  },
+  controlButton: {
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#E8E5FF',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
-    elevation: 4,
   },
-  playIcon: {
+  playControlButton: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: '#D4CFFF',
+  },
+  controlIcon: {
+    fontSize: 13,
+    color: '#6C63FF',
+    fontWeight: '600',
+  },
+  controlPlayIcon: {
     width: 0,
     height: 0,
     borderLeftWidth: 14,
-    borderTopWidth: 9,
-    borderBottomWidth: 9,
+    borderTopWidth: 10,
+    borderBottomWidth: 10,
     borderLeftColor: '#6C63FF',
     borderTopColor: 'transparent',
     borderBottomColor: 'transparent',
-    marginLeft: 4,
+    marginLeft: 3,
   },
-  pauseIcon: {
+  controlPauseIcon: {
     flexDirection: 'row',
-    gap: 4,
+    gap: 5,
   },
-  pauseBar: {
-    width: 4,
-    height: 16,
+  controlPauseBar: {
+    width: 5,
+    height: 18,
     backgroundColor: '#6C63FF',
     borderRadius: 2,
   },
@@ -442,11 +492,9 @@ const styles = StyleSheet.create({
     height: 30,
   },
   timeBar: {
-    width: '100%',
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    // paddingHorizontal: 4,
     marginTop: -4,
   },
   currentTimeText: {

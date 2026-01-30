@@ -268,27 +268,10 @@ export default function RecordingDetailScreen() {
               }}
             />
 
-            {/* 分析说明 */}
-            <ThemedText style={styles.analysisText}>
-              点击红色区域可跳转到打鼾片段播放，拖动右侧滑块调节阈值
+            {/* 说明文字 */}
+            <ThemedText style={styles.hintText}>
+              点击红色波形跳转播放，拖动右侧滑块调节阈值
             </ThemedText>
-
-            {/* 统计信息 */}
-            <View style={styles.statsRow}>
-              <View style={styles.statItem}>
-                <ThemedText style={[styles.statValue, { color: '#F44336' }]}>
-                  {dynamicSnoreEvents.length}
-                </ThemedText>
-                <ThemedText style={styles.statLabel}>打鼾次数</ThemedText>
-              </View>
-              <View style={styles.statDivider} />
-              <View style={styles.statItem}>
-                <ThemedText style={styles.statValue}>
-                  {threshold}
-                </ThemedText>
-                <ThemedText style={styles.statLabel}>阈值 (dB)</ThemedText>
-              </View>
-            </View>
           </View>
         ) : (
           <View
@@ -376,12 +359,11 @@ const styles = StyleSheet.create({
     fontSize: 12,
     opacity: 0.7,
   },
-  analysisText: {
+  hintText: {
     fontSize: 13,
     opacity: 0.6,
     textAlign: 'center',
-    marginTop: 8,
-    marginBottom: 4,
+    marginTop: 88,
   },
   noDataContainer: {
     alignItems: 'center',
@@ -395,32 +377,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     opacity: 0.4,
     marginTop: 6,
-  },
-  statsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-evenly',
-    alignItems: 'center',
-    marginTop: 16,
-    paddingTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(128, 128, 128, 0.1)',
-  },
-  statItem: {
-    alignItems: 'center',
-  },
-  statValue: {
-    fontSize: 24,
-    fontWeight: '700',
-  },
-  statLabel: {
-    fontSize: 12,
-    opacity: 0.6,
-    marginTop: 4,
-  },
-  statDivider: {
-    width: 1,
-    height: 30,
-    backgroundColor: 'rgba(128, 128, 128, 0.2)',
   },
   actionsContainer: {
     flexDirection: 'row',
