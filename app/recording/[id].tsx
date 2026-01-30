@@ -75,6 +75,14 @@ export default function RecordingDetailScreen() {
     setupAudioMode();
   }, []);
 
+  // 页面卸载时恢复默认屏幕方向
+  useEffect(() => {
+    return () => {
+      // 组件卸载时解锁屏幕方向，恢复跟随系统
+      ScreenOrientation.unlockAsync();
+    };
+  }, []);
+
   const handleDelete = () => {
     if (!recording) return;
     
@@ -186,7 +194,7 @@ export default function RecordingDetailScreen() {
           headerRight: () => (
             <TouchableOpacity
               onPress={toggleOrientation}
-              style={{ marginRight: 16, padding: 8 }}
+              style={{ padding: 8 }}
               activeOpacity={0.7}
               accessibilityLabel="切换屏幕方向"
               accessibilityRole="button"
