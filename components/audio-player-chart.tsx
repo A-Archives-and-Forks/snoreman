@@ -117,15 +117,14 @@ export function AudioPlayerChart({
     return (currentPosition / maxTime) * chartWidth;
   }, [currentPosition, maxTime, chartWidth]);
   
-  // 阈值线 Y 坐标（与波形和滑块对齐）
-  // 波形使用 chartHeight * 0.85，底部留白 chartHeight * 0.05
-  // 所以有效高度是 0.85，从底部 0.05 开始
+  // 阈值线 Y 坐标（与波形对齐）
+  // 波形从底部开始，高度为 (decibel / maxDecibel) * chartHeight * 0.85
+  // 阈值线应该与对应分贝值的波形条顶部对齐
   const thresholdY = useMemo(() => {
     if (!chartData.maxDecibel) return chartHeight * 0.5;
-    // 计算在有效区域内的位置（0.85 比例）
-    const ratioInEffectiveArea = localThreshold / chartData.maxDecibel;
-    // 从底部开始：底部留白 + 有效区域内的高度
-    return chartHeight - (chartHeight * 0.05 + ratioInEffectiveArea * chartHeight * 0.85);
+    // 阈值线位置 = 图表高度 - 阈值对应的波形条高度
+    const thresholdBarHeight = (localThreshold / chartData.maxDecibel) * chartHeight * 0.85;
+    return chartHeight - thresholdBarHeight;
   }, [chartData.maxDecibel, chartHeight, localThreshold]);
   
   // 阈值滑块改变
