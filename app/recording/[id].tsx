@@ -331,6 +331,39 @@ export default function RecordingDetailScreen() {
           </View>
         )}
 
+        {/* 录音统计信息 */}
+        {hasDecibelData && (
+          <View
+            style={[
+              styles.card,
+              { backgroundColor: isDark ? '#1E1E1E' : '#F8F9FA' },
+            ]}
+          >
+            <View style={styles.statsRow}>
+              <View style={styles.statItem}>
+                <ThemedText style={styles.statValue}>
+                  {decibelData.filter(d => d.decibel >= threshold).length}
+                </ThemedText>
+                <ThemedText style={styles.statLabel}>超阈值次数</ThemedText>
+              </View>
+              <View style={styles.statDivider} />
+              <View style={styles.statItem}>
+                <ThemedText style={styles.statValue}>
+                  {Math.round(decibelData.length > 0 ? decibelData.reduce((a, b) => a + b.decibel, 0) / decibelData.length : 0)}
+                </ThemedText>
+                <ThemedText style={styles.statLabel}>平均分贝</ThemedText>
+              </View>
+              <View style={styles.statDivider} />
+              <View style={styles.statItem}>
+                <ThemedText style={styles.statValue}>
+                  {Math.max(...decibelData.map(d => d.decibel), 0)}
+                </ThemedText>
+                <ThemedText style={styles.statLabel}>最大分贝</ThemedText>
+              </View>
+            </View>
+          </View>
+        )}
+
         {/* 操作按钮 */}
         <View style={styles.actionsContainer}>
           <TouchableOpacity
@@ -417,6 +450,28 @@ const styles = StyleSheet.create({
     fontSize: 13,
     opacity: 0.4,
     marginTop: 6,
+  },
+  statsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-evenly',
+    alignItems: 'center',
+  },
+  statItem: {
+    alignItems: 'center',
+  },
+  statValue: {
+    fontSize: 24,
+    fontWeight: '700',
+  },
+  statLabel: {
+    fontSize: 12,
+    opacity: 0.6,
+    marginTop: 4,
+  },
+  statDivider: {
+    width: 1,
+    height: 30,
+    backgroundColor: 'rgba(128, 128, 128, 0.2)',
   },
   actionsContainer: {
     flexDirection: 'row',
