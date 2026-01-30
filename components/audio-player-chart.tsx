@@ -157,10 +157,11 @@ export function AudioPlayerChart({
       }
     }
     
-    // 如果找到了红色波形条且在50像素内，跳转到该位置
+    // 如果找到了红色波形条且在50像素内，跳转到该位置（提前2秒，让用户听到完整呼噜声）
     if (nearestRedPoint && minDistance < 50) {
       try {
-        player.seekTo(nearestRedPoint.timestamp / 1000);
+        const jumpPosition = Math.max(0, nearestRedPoint.timestamp - 2000);
+        player.seekTo(jumpPosition / 1000);
         if (!status?.playing) {
           player.play();
         }
