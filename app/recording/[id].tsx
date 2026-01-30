@@ -244,7 +244,7 @@ export default function RecordingDetailScreen() {
               </View>
               <View style={styles.legendItem}>
                 <View style={[styles.legendLine, { backgroundColor: '#FF9800' }]} />
-                <ThemedText style={styles.legendText}>阈值线</ThemedText>
+                <ThemedText style={styles.legendText}>阈值 {threshold}dB</ThemedText>
               </View>
             </View>
 
