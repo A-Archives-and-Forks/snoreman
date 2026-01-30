@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { setAudioModeAsync } from 'expo-audio';
+import * as ScreenOrientation from 'expo-screen-orientation';
 import { useLocalSearchParams, Stack, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Sharing from 'expo-sharing';
@@ -17,6 +18,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { AudioPlayerChart } from '@/components/audio-player-chart';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/constants/theme';
 import {
   Recording,
@@ -35,6 +37,7 @@ export default function RecordingDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const [recording, setRecording] = useState<Recording | null>(null);
   const [threshold, setThreshold] = useState(SNORE_THRESHOLD_DB);
+  const [isLandscape, setIsLandscape] = useState(false);
 
   const router = useRouter();
   const colorScheme = useColorScheme();
@@ -197,6 +200,30 @@ export default function RecordingDetailScreen() {
     }
   };
 
+  // 切换屏幕方向
+  const toggleOrientation = async () => {
+    try {
+      // 获取当前方向
+      const orientation = await ScreenOrientation.getOrientationAsync();
+      const isCurrentlyLandscape = 
+        orientation === ScreenOrientation.Orientation.LANDSCAPE_LEFT ||
+        orientation === ScreenOrientation.Orientation.LANDSCAPE_RIGHT;
+      
+      if (isCurrentlyLandscape) {
+        // 当前是横屏，切换到竖屏
+        await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
+        setIsLandscape(false);
+      } else {
+        // 当前是竖屏，切换到横屏
+        await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE);
+        setIsLandscape(true);
+      }
+    } catch (error) {
+      console.error('Orientation toggle error:', error);
+      Alert.alert('提示', '无法切换屏幕方向，请确保设备支持旋转');
+    }
+  };
+
   if (!recording) {
     return (
       <ThemedView style={[styles.container, styles.centerContent]}>
@@ -215,6 +242,19 @@ export default function RecordingDetailScreen() {
         options={{
           title: '录音详情',
           headerBackTitle: '返回',
+          headerRight: () => (
+            <TouchableOpacity
+              onPress={toggleOrientation}
+              style={{ marginRight: 16, padding: 8 }}
+              activeOpacity={0.7}
+            >
+              <Ionicons 
+                name="scan-outline" 
+                size={22} 
+                color={isDark ? '#fff' : '#333'} 
+              />
+            </TouchableOpacity>
+          ),
         }}
       />
       <ScrollView

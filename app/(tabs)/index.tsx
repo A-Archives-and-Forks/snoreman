@@ -16,6 +16,7 @@ import { File, Paths } from 'expo-file-system';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { LiveWaveform } from '@/components/decibel-chart';
+import { Ionicons } from '@expo/vector-icons';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useRecording } from '@/hooks/use-recording';
 import { Colors } from '@/constants/theme';
@@ -381,12 +382,9 @@ export default function HomeScreen() {
           activeOpacity={0.8}
         >
           {isRecording ? (
-            <View style={styles.stopIcon} />
+            <Ionicons name="stop-circle" size={32} color="#FFFFFF" />
           ) : (
-            <View style={styles.micIcon}>
-              <View style={styles.micBody} />
-              <View style={styles.micBase} />
-            </View>
+            <Ionicons name="mic" size={32} color="#FFFFFF" />
           )}
         </TouchableOpacity>
         <ThemedText style={styles.buttonLabel}>
@@ -584,28 +582,6 @@ const styles = StyleSheet.create({
   },
   recordButtonStop: {
     backgroundColor: '#F44336',
-  },
-  stopIcon: {
-    width: 24,
-    height: 24,
-    borderRadius: 4,
-    backgroundColor: '#FFFFFF',
-  },
-  micIcon: {
-    alignItems: 'center',
-  },
-  micBody: {
-    width: 16,
-    height: 24,
-    borderRadius: 8,
-    backgroundColor: '#FFFFFF',
-  },
-  micBase: {
-    width: 24,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: '#FFFFFF',
-    marginTop: 4,
   },
   buttonLabel: {
     fontSize: 14,

@@ -11,6 +11,7 @@ import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import { DecibelDataPoint } from '@/utils/storage';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { ThemedText } from '@/components/themed-text';
+import { Ionicons } from '@expo/vector-icons';
 
 interface AudioPlayerChartProps {
   uri: string;
@@ -350,7 +351,7 @@ export function AudioPlayerChart({
           onPress={handleSkipBackward}
           activeOpacity={0.8}
         >
-          <ThemedText style={styles.controlIcon}>« 5s</ThemedText>
+          <Ionicons name="play-back" size={20} color="#6C63FF" />
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -359,12 +360,9 @@ export function AudioPlayerChart({
           activeOpacity={0.8}
         >
           {status?.playing ? (
-            <View style={styles.controlPauseIcon}>
-              <View style={styles.controlPauseBar} />
-              <View style={styles.controlPauseBar} />
-            </View>
+            <Ionicons name="pause" size={24} color="#6C63FF" />
           ) : (
-            <View style={styles.controlPlayIcon} />
+            <Ionicons name="play" size={24} color="#6C63FF" />
           )}
         </TouchableOpacity>
 
@@ -373,7 +371,7 @@ export function AudioPlayerChart({
           onPress={handleSkipForward}
           activeOpacity={0.8}
         >
-          <ThemedText style={styles.controlIcon}>5s »</ThemedText>
+          <Ionicons name="play-forward" size={20} color="#6C63FF" />
         </TouchableOpacity>
       </View>
     </View>
@@ -456,32 +454,6 @@ const styles = StyleSheet.create({
     height: 52,
     borderRadius: 26,
     backgroundColor: '#D4CFFF',
-  },
-  controlIcon: {
-    fontSize: 13,
-    color: '#6C63FF',
-    fontWeight: '600',
-  },
-  controlPlayIcon: {
-    width: 0,
-    height: 0,
-    borderLeftWidth: 14,
-    borderTopWidth: 10,
-    borderBottomWidth: 10,
-    borderLeftColor: '#6C63FF',
-    borderTopColor: 'transparent',
-    borderBottomColor: 'transparent',
-    marginLeft: 3,
-  },
-  controlPauseIcon: {
-    flexDirection: 'row',
-    gap: 5,
-  },
-  controlPauseBar: {
-    width: 5,
-    height: 18,
-    backgroundColor: '#6C63FF',
-    borderRadius: 2,
   },
   sliderContainer: {
     width: '100%',
