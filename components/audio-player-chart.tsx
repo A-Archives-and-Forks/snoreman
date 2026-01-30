@@ -83,7 +83,7 @@ export function AudioPlayerChart({
   const chartData = useMemo(() => {
     if (data.length === 0) return { points: [], maxDecibel: 0 };
     
-    const MAX_POINTS = 200;
+    const MAX_POINTS = 400;
     let sampledData = data;
     
     if (data.length > MAX_POINTS) {
@@ -253,23 +253,6 @@ export function AudioPlayerChart({
               />
             ))}
           </View>
-
-          {/* 打鼾高亮区域 */}
-          {snoreRegions.map((region, index) => (
-            <View
-              key={index}
-              style={[
-                styles.snoreRegion,
-                {
-                  left: region.x,
-                  width: region.width,
-                  height: chartHeight,
-                  backgroundColor: 'rgba(244, 67, 54, 0.2)',
-                },
-              ]}
-              pointerEvents="none"
-            />
-          ))}
 
           {/* 阈值线 */}
           <View
