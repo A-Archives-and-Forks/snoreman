@@ -1,4 +1,4 @@
-import { useCallback, useState, useRef, useEffect } from 'react';
+import { useCallback, useState, useEffect } from 'react';
 import {
   View,
   StyleSheet,
@@ -93,7 +93,6 @@ export default function HomeScreen() {
   useEffect(() => {
     const loadThreshold = async () => {
       const savedThreshold = await getSnoreThreshold();
-      console.log('Loaded threshold:', savedThreshold);
       setThreshold(savedThreshold);
     };
     loadThreshold();
@@ -110,11 +109,8 @@ export default function HomeScreen() {
   };
 
   const handleStopRecording = async () => {
-    console.log('handleStopRecording called, duration:', duration);
-    
     try {
       const result = await stopRecording();
-      console.log('stopRecording result:', result);
       
       if (result && result.uri) {
         // 保存当前 duration，因为 stopRecording 后 hook 的 duration 会被重置
@@ -138,20 +134,14 @@ export default function HomeScreen() {
             // 复制文件
             sourceFile.copy(destFile);
             finalUri = destFile.uri;
-            console.log('Recording copied to:', finalUri, 'Size:', sourceFile.size, 'bytes');
-          } else {
-            console.warn('Source file does not exist:', result.uri);
           }
         } catch (copyError) {
-          console.warn('Failed to copy recording file, using original URI:', copyError);
           // 如果复制失败，继续使用原始 URI
+          // 静默处理，不中断用户流程
         }
-        
-        console.log('Final Recording URI:', finalUri);
         
         // 使用当前阈值分析分贝数据
         const analysis = analyzeDecibelData(result.decibelData, threshold);
-        console.log('Analysis result:', analysis);
         
         const newRecording: RecordingData = {
           id: recordingId,
@@ -163,17 +153,12 @@ export default function HomeScreen() {
           threshold, // 保存当前阈值
         };
 
-        console.log('Saving recording:', newRecording.id, 'URI:', newRecording.uri);
         await saveRecording(newRecording);
-        console.log('Recording saved, reloading list');
         await loadRecordings();
-        console.log('List reloaded');
       } else {
-        console.log('No result from stopRecording');
         Alert.alert('提示', '录音数据为空');
       }
     } catch (err) {
-      console.error('Failed to save recording:', err);
       Alert.alert('错误', '无法保存录音: ' + (err as Error).message);
     }
   };
@@ -200,9 +185,6 @@ export default function HomeScreen() {
 
   const isSnoring = currentDecibel >= threshold;
 
-  // 计算基于当前阈值的打鼾次数
-  const snoringCount = decibelData.filter(d => d.decibel >= threshold).length;
-
   // 渲染滑动删除按钮
   const renderRightActions = (
     progress: Animated.AnimatedInterpolation<number>,
@@ -219,6 +201,8 @@ export default function HomeScreen() {
       <TouchableOpacity
         style={styles.deleteAction}
         onPress={() => handleDirectDelete(itemId)}
+        accessibilityLabel="删除录音"
+        accessibilityRole="button"
       >
         <Animated.View style={{ transform: [{ scale }] }}>
           <ThemedText style={styles.deleteActionText}>删除</ThemedText>
@@ -310,7 +294,6 @@ export default function HomeScreen() {
               value={threshold}
               onValueChange={setThreshold}
               onSlidingComplete={(value) => {
-                console.log('Saving threshold:', value);
                 saveSnoreThreshold(value);
               }}
               minimumTrackTintColor="#6C63FF"
@@ -320,28 +303,6 @@ export default function HomeScreen() {
             <View style={styles.thresholdHints}>
               <ThemedText style={styles.thresholdHint}>安静 20</ThemedText>
               <ThemedText style={styles.thresholdHint}>80 嘈杂</ThemedText>
-            </View>
-          </View>
-          
-          {/* 统计信息 */}
-          <View style={styles.statsRow}>
-            <View style={styles.statItem}>
-              <ThemedText style={styles.statValue}>{snoringCount}</ThemedText>
-              <ThemedText style={styles.statLabel}>超阈值次数</ThemedText>
-            </View>
-            <View style={styles.statDivider} />
-            <View style={styles.statItem}>
-              <ThemedText style={styles.statValue}>
-                {Math.round(decibelData.length > 0 ? decibelData.reduce((a, b) => a + b.decibel, 0) / decibelData.length : 0)}
-              </ThemedText>
-              <ThemedText style={styles.statLabel}>平均分贝</ThemedText>
-            </View>
-            <View style={styles.statDivider} />
-            <View style={styles.statItem}>
-              <ThemedText style={styles.statValue}>
-                {Math.max(...decibelData.map(d => d.decibel), 0)}
-              </ThemedText>
-              <ThemedText style={styles.statLabel}>最大分贝</ThemedText>
             </View>
           </View>
         </View>
@@ -378,6 +339,8 @@ export default function HomeScreen() {
           ]}
           onPress={isRecording ? handleStopRecording : handleStartRecording}
           activeOpacity={0.8}
+          accessibilityLabel={isRecording ? '停止录音' : '开始录音'}
+          accessibilityRole="button"
         >
           {isRecording ? (
             <Ionicons name="square" size={28} color="#FFFFFF" />
@@ -468,32 +431,6 @@ const styles = StyleSheet.create({
   waveformContainer: {
     marginVertical: 12,
     overflow: 'hidden',
-  },
-  statsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    alignItems: 'center',
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(128, 128, 128, 0.2)',
-  },
-  statItem: {
-    alignItems: 'center',
-    flex: 1,
-  },
-  statValue: {
-    fontSize: 18,
-    fontWeight: '700',
-  },
-  statLabel: {
-    fontSize: 12,
-    opacity: 0.6,
-    marginTop: 2,
-  },
-  statDivider: {
-    width: 1,
-    height: 30,
-    backgroundColor: 'rgba(128, 128, 128, 0.2)',
   },
   errorContainer: {
     marginHorizontal: 24,

@@ -125,16 +125,17 @@ export function useRecording(): UseRecordingResult {
           // metering 为 0 在安静环境下是不可能的（应该是负数），所以 0 表示数据无效
           if (metering !== undefined && metering !== null && metering < 0) {
             decibel = meteringToDecibel(metering);
-            console.log(`[Metering] Raw: ${metering.toFixed(1)} dBFS -> Display: ${decibel} dB`);
-          } else {
+          } else if (__DEV__) {
             // 在模拟器上 metering 可能不可用或始终为 0
-            // 生成模拟数据以便测试 UI
+            // 仅在开发环境生成模拟数据以便测试 UI
             // 模拟安静房间环境：25-40 dB，偶尔有打鼾 50-65 dB
             const baseDecibel = 25 + Math.random() * 15; // 25-40 dB 基础噪音
             // 10% 概率产生较高分贝（模拟打鼾）
             decibel = Math.random() < 0.1 ? 50 + Math.random() * 15 : baseDecibel;
             decibel = Math.round(decibel);
-            console.log(`[Metering] Simulated: ${decibel} dB (raw metering: ${metering})`);
+          } else {
+            // 生产环境：metering 无效时设为 0
+            decibel = 0;
           }
           
           const timestamp = Date.now() - startTimeRef.current;
@@ -147,10 +148,13 @@ export function useRecording(): UseRecordingResult {
           };
           
           decibelDataRef.current.push(dataPoint);
+          // 只保留最近的数据用于实时显示，避免内存和性能问题
+          if (decibelDataRef.current.length > 120) {
+            decibelDataRef.current = decibelDataRef.current.slice(-120);
+          }
           setDecibelData([...decibelDataRef.current]);
           setCurrentDecibel(decibel);
         } catch (e) {
-          console.error('Error getting recorder status:', e);
         }
       }
     }, METERING_INTERVAL_MS);
@@ -204,10 +208,27 @@ export function useRecording(): UseRecordingResult {
     try {
       setError(null);
       
-      // 请求权限
+      // 先立即设置录音状态，让用户看到即时反馈
+      const newId = generateId();
+      recordingIdRef.current = newId;
+      setRecordingId(newId);
+      isRecordingRef.current = true;
+      setIsRecording(true);
+      
+      // 重置其他状态
+      decibelDataRef.current = [];
+      setDecibelData([]);
+      setCurrentDecibel(0);
+      setDuration(0);
+      durationRef.current = 0;
+      startTimeRef.current = Date.now();
+      
+      // 请求权限（异步，不阻塞 UI）
       const status = await AudioModule.requestRecordingPermissionsAsync();
       if (!status.granted) {
         setError('需要麦克风权限才能录音');
+        isRecordingRef.current = false;
+        setIsRecording(false);
         return;
       }
 
@@ -221,40 +242,25 @@ export function useRecording(): UseRecordingResult {
         interruptionMode: 'doNotMix',
       });
 
-      // 重置状态
-      const newId = generateId();
-      recordingIdRef.current = newId;
-      setRecordingId(newId);
-      decibelDataRef.current = [];
-      setDecibelData([]);
-      setCurrentDecibel(0);
-      setDuration(0);
-      durationRef.current = 0;
-      startTimeRef.current = Date.now();
-
       // 准备录音（这是必须的步骤）
       await recorder.prepareToRecordAsync();
       
       // 开始录音
       recorder.record();
       
-      isRecordingRef.current = true;
-      setIsRecording(true);
+      // 启动定时器
       startMetering();
       startDurationTimer();
       startPeriodicSave();
-      
-      console.log('Recording started');
     } catch (err) {
-      console.error('Failed to start recording:', err);
       setError('无法开始录音: ' + (err as Error).message);
+      isRecordingRef.current = false;
+      setIsRecording(false);
     }
   }, [recorder, startMetering, startDurationTimer, startPeriodicSave]);
 
   // 停止录音
   const stopRecording = useCallback(async (): Promise<{ uri: string; decibelData: DecibelDataPoint[]; duration: number } | null> => {
-    console.log('Stopping recording...');
-    
     try {
       stopMetering();
       stopDurationTimer();
@@ -262,7 +268,6 @@ export function useRecording(): UseRecordingResult {
 
       // 检查是否正在录音
       if (!isRecordingRef.current) {
-        console.log('Not recording, returning null');
         return null;
       }
 
@@ -274,13 +279,8 @@ export function useRecording(): UseRecordingResult {
 
       // 停止录音
       await recorder.stop();
-      console.log('Recorder stopped');
 
       const uri = recorder.uri;
-      
-      console.log('Recording URI:', uri);
-      console.log('Duration:', finalDuration);
-      console.log('Decibel data points:', finalDecibelData.length);
       
       // 清理状态
       setCurrentDecibel(0);
@@ -293,10 +293,8 @@ export function useRecording(): UseRecordingResult {
         return { uri, decibelData: finalDecibelData, duration: finalDuration };
       }
       
-      console.log('No URI available');
       return null;
     } catch (err) {
-      console.error('Failed to stop recording:', err);
       setError('无法停止录音: ' + (err as Error).message);
       isRecordingRef.current = false;
       setIsRecording(false);

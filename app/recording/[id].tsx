@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, useMemo } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   View,
   StyleSheet,
@@ -22,7 +22,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/constants/theme';
 import {
   Recording,
-  SnoreEvent,
   getRecording,
   updateRecording,
   deleteRecording,
@@ -30,7 +29,6 @@ import {
   formatDate,
   analyzeDecibelData,
   SNORE_THRESHOLD_DB,
-  MIN_SNORE_DURATION_MS,
 } from '@/utils/storage';
 
 export default function RecordingDetailScreen() {
@@ -45,62 +43,9 @@ export default function RecordingDetailScreen() {
   const insets = useSafeAreaInsets();
   const isDark = colorScheme === 'dark';
 
-  // 基于当前阈值动态计算打鼾事件
-  const dynamicSnoreEvents = useMemo(() => {
-    if (!recording?.decibelData || recording.decibelData.length === 0) return [];
-    
-    const events: SnoreEvent[] = [];
-    let currentEvent: { startTime: number; maxDecibel: number } | null = null;
-    
-    for (const point of recording.decibelData) {
-      const isAboveThreshold = point.decibel >= threshold;
-      if (isAboveThreshold) {
-        if (!currentEvent) {
-          currentEvent = { startTime: point.timestamp, maxDecibel: point.decibel };
-        } else {
-          currentEvent.maxDecibel = Math.max(currentEvent.maxDecibel, point.decibel);
-        }
-      } else {
-        if (currentEvent) {
-          const duration = point.timestamp - currentEvent.startTime;
-          if (duration >= MIN_SNORE_DURATION_MS) {
-            events.push({
-              startTime: currentEvent.startTime,
-              endTime: point.timestamp,
-              maxDecibel: currentEvent.maxDecibel,
-            });
-          }
-          currentEvent = null;
-        }
-      }
-    }
-    
-    // 处理最后一个事件
-    if (currentEvent && recording.decibelData.length > 0) {
-      const lastPoint = recording.decibelData[recording.decibelData.length - 1];
-      const duration = lastPoint.timestamp - currentEvent.startTime;
-      if (duration >= MIN_SNORE_DURATION_MS) {
-        events.push({
-          startTime: currentEvent.startTime,
-          endTime: lastPoint.timestamp,
-          maxDecibel: currentEvent.maxDecibel,
-        });
-      }
-    }
-    
-    return events;
-  }, [recording?.decibelData, threshold]);
-
   const loadRecording = useCallback(async () => {
     if (id) {
-      console.log('[RecordingDetail] Loading recording with ID:', id);
       const data = await getRecording(id);
-      console.log('[RecordingDetail] Loaded recording:', {
-        id: data?.id,
-        uri: data?.uri,
-        createdAt: data?.createdAt,
-        duration: data?.duration,
-      });
       setRecording(data);
       // 加载录音保存的阈值，如果没有则使用默认值
       if (data?.threshold !== undefined) {
@@ -125,7 +70,6 @@ export default function RecordingDetailScreen() {
           shouldPlayInBackground: false,
         });
       } catch (e) {
-        console.error('Failed to set audio mode:', e);
       }
     };
     setupAudioMode();
@@ -144,7 +88,6 @@ export default function RecordingDetailScreen() {
             await deleteRecording(recording.id);
             router.back();
           } catch (error) {
-            console.error('Delete error:', error);
             Alert.alert('错误', '删除失败，请重试');
           }
         },
@@ -195,7 +138,6 @@ export default function RecordingDetailScreen() {
         // 忽略清理错误
       }
     } catch (error) {
-      console.error('Export error:', error);
       Alert.alert('错误', '导出失败，请重试');
     }
   };
@@ -219,7 +161,6 @@ export default function RecordingDetailScreen() {
         setIsLandscape(true);
       }
     } catch (error) {
-      console.error('Orientation toggle error:', error);
       Alert.alert('提示', '无法切换屏幕方向，请确保设备支持旋转');
     }
   };
@@ -247,6 +188,8 @@ export default function RecordingDetailScreen() {
               onPress={toggleOrientation}
               style={{ marginRight: 16, padding: 8 }}
               activeOpacity={0.7}
+              accessibilityLabel="切换屏幕方向"
+              accessibilityRole="button"
             >
               <Ionicons 
                 name="scan-outline" 
@@ -370,6 +313,8 @@ export default function RecordingDetailScreen() {
             style={styles.exportButton}
             onPress={handleExport}
             activeOpacity={0.8}
+            accessibilityLabel="导出录音文件"
+            accessibilityRole="button"
           >
             <ThemedText style={styles.exportButtonText}>导出录音</ThemedText>
           </TouchableOpacity>
@@ -378,6 +323,8 @@ export default function RecordingDetailScreen() {
             style={styles.deleteButton}
             onPress={handleDelete}
             activeOpacity={0.8}
+            accessibilityLabel="删除此录音"
+            accessibilityRole="button"
           >
             <ThemedText style={styles.deleteButtonText}>删除</ThemedText>
           </TouchableOpacity>

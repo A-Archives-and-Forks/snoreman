@@ -86,7 +86,6 @@ export async function getRecordingsMeta(): Promise<RecordingMeta[]> {
     
     return [];
   } catch (error) {
-    console.error('Failed to get recordings meta:', error);
     return [];
   }
 }
@@ -94,7 +93,6 @@ export async function getRecordingsMeta(): Promise<RecordingMeta[]> {
 // 迁移旧数据到新格式
 async function migrateToNewFormat(oldRecordings: Recording[]): Promise<void> {
   try {
-    console.log('Migrating to new storage format...');
     const metas: RecordingMeta[] = [];
     
     for (const recording of oldRecordings) {
@@ -123,10 +121,7 @@ async function migrateToNewFormat(oldRecordings: Recording[]): Promise<void> {
     
     // 删除旧数据
     await AsyncStorage.removeItem(RECORDINGS_KEY);
-    
-    console.log('Migration complete');
   } catch (error) {
-    console.error('Migration failed:', error);
   }
 }
 
@@ -155,7 +150,6 @@ export async function getDecibelData(id: string): Promise<DecibelDataPoint[] | n
     }
     return null;
   } catch (error) {
-    console.error('Failed to get decibel data:', error);
     return null;
   }
 }
@@ -188,7 +182,6 @@ export async function saveRecording(recording: Recording): Promise<void> {
     // 清除临时录音数据
     await AsyncStorage.removeItem(CURRENT_RECORDING_KEY);
   } catch (error) {
-    console.error('Failed to save recording:', error);
     throw error;
   }
 }
@@ -208,7 +201,6 @@ export async function getRecording(id: string): Promise<Recording | null> {
       decibelData: decibelData || [],
     };
   } catch (error) {
-    console.error('Failed to get recording:', error);
     return null;
   }
 }
@@ -230,7 +222,6 @@ export async function updateRecording(id: string, updates: Partial<Recording>): 
       }
     }
   } catch (error) {
-    console.error('Failed to update recording:', error);
     throw error;
   }
 }
@@ -249,7 +240,6 @@ export async function deleteRecording(id: string): Promise<void> {
           file.delete();
         }
       } catch (e) {
-        console.warn('Failed to delete audio file:', e);
       }
       
       // 删除分贝数据
@@ -260,7 +250,6 @@ export async function deleteRecording(id: string): Promise<void> {
       await AsyncStorage.setItem(RECORDINGS_META_KEY, JSON.stringify(filtered));
     }
   } catch (error) {
-    console.error('Failed to delete recording:', error);
     throw error;
   }
 }
@@ -274,7 +263,6 @@ export async function saveCurrentRecordingData(data: {
   try {
     await AsyncStorage.setItem(CURRENT_RECORDING_KEY, JSON.stringify(data));
   } catch (error) {
-    console.error('Failed to save current recording data:', error);
   }
 }
 
@@ -290,7 +278,6 @@ export async function getCurrentRecordingData(): Promise<{
     }
     return null;
   } catch (error) {
-    console.error('Failed to get current recording data:', error);
     return null;
   }
 }
@@ -299,7 +286,6 @@ export async function clearCurrentRecordingData(): Promise<void> {
   try {
     await AsyncStorage.removeItem(CURRENT_RECORDING_KEY);
   } catch (error) {
-    console.error('Failed to clear current recording data:', error);
   }
 }
 
@@ -445,11 +431,8 @@ export function generateId(): string {
 // 保存打鼾阈值设置
 export async function saveSnoreThreshold(threshold: number): Promise<void> {
   try {
-    console.log('saveSnoreThreshold called with:', threshold);
     await AsyncStorage.setItem(SNORE_THRESHOLD_KEY, threshold.toString());
-    console.log('Threshold saved successfully');
   } catch (error) {
-    console.error('Failed to save snore threshold:', error);
   }
 }
 
@@ -457,18 +440,14 @@ export async function saveSnoreThreshold(threshold: number): Promise<void> {
 export async function getSnoreThreshold(): Promise<number> {
   try {
     const value = await AsyncStorage.getItem(SNORE_THRESHOLD_KEY);
-    console.log('getSnoreThreshold raw value:', value);
     if (value !== null) {
       const threshold = parseInt(value, 10);
       if (!isNaN(threshold)) {
-        console.log('getSnoreThreshold returning:', threshold);
         return threshold;
       }
     }
-    console.log('getSnoreThreshold returning default:', SNORE_THRESHOLD_DB);
     return SNORE_THRESHOLD_DB; // 返回默认值
   } catch (error) {
-    console.error('Failed to get snore threshold:', error);
     return SNORE_THRESHOLD_DB;
   }
 }

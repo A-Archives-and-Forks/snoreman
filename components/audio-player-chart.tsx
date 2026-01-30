@@ -165,7 +165,6 @@ export function AudioPlayerChart({
           player.play();
         }
       } catch (e) {
-        console.error('Seek error:', e);
       }
     }
   }, [chartData.points, localThreshold, player, status?.playing]);
@@ -179,7 +178,6 @@ export function AudioPlayerChart({
         player.play();
       }
     } catch (e) {
-      console.error('PlayPause error:', e);
     }
   }, [player, status?.playing]);
 
@@ -189,7 +187,6 @@ export function AudioPlayerChart({
       const newPosition = Math.max(0, currentPosition - 5000);
       player.seekTo(newPosition / 1000);
     } catch (e) {
-      console.error('Skip backward error:', e);
     }
   }, [player, currentPosition]);
 
@@ -199,7 +196,6 @@ export function AudioPlayerChart({
       const newPosition = Math.min(maxTime, currentPosition + 5000);
       player.seekTo(newPosition / 1000);
     } catch (e) {
-      console.error('Skip forward error:', e);
     }
   }, [player, currentPosition, maxTime]);
 
@@ -215,7 +211,6 @@ export function AudioPlayerChart({
       player.seekTo(value / 1000);
       setIsSliding(false);
     } catch (e) {
-      console.error('Slider seek error:', e);
       setIsSliding(false);
     }
   }, [player]);
@@ -350,6 +345,8 @@ export function AudioPlayerChart({
           style={styles.controlButton}
           onPress={handleSkipBackward}
           activeOpacity={0.8}
+          accessibilityLabel="快退5秒"
+          accessibilityRole="button"
         >
           <Ionicons name="play-back" size={20} color="#6C63FF" />
         </TouchableOpacity>
@@ -358,6 +355,8 @@ export function AudioPlayerChart({
           style={[styles.controlButton, styles.playControlButton]}
           onPress={handlePlayPause}
           activeOpacity={0.8}
+          accessibilityLabel={status?.playing ? '暂停' : '播放'}
+          accessibilityRole="button"
         >
           {status?.playing ? (
             <Ionicons name="pause" size={24} color="#6C63FF" />
@@ -370,6 +369,8 @@ export function AudioPlayerChart({
           style={styles.controlButton}
           onPress={handleSkipForward}
           activeOpacity={0.8}
+          accessibilityLabel="快进5秒"
+          accessibilityRole="button"
         >
           <Ionicons name="play-forward" size={20} color="#6C63FF" />
         </TouchableOpacity>
