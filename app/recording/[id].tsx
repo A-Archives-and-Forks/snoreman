@@ -252,7 +252,6 @@ export default function RecordingDetailScreen() {
             <AudioPlayerChart
               uri={recording.uri}
               data={decibelData}
-              snoreEvents={dynamicSnoreEvents}
               duration={recording.duration}
               threshold={threshold}
               height={200}

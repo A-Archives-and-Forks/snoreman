@@ -8,14 +8,13 @@ import {
 } from 'react-native';
 import Slider from '@react-native-community/slider';
 import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
-import { DecibelDataPoint, SnoreEvent } from '@/utils/storage';
+import { DecibelDataPoint } from '@/utils/storage';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { ThemedText } from '@/components/themed-text';
 
 interface AudioPlayerChartProps {
   uri: string;
   data: DecibelDataPoint[];
-  snoreEvents?: SnoreEvent[];
   duration: number; // 总时长（毫秒）
   threshold?: number;
   height?: number;
@@ -43,7 +42,6 @@ function formatTime(ms: number): string {
 export function AudioPlayerChart({
   uri,
   data,
-  snoreEvents = [],
   duration,
   threshold = 45,
   height = DEFAULT_HEIGHT,
@@ -113,17 +111,6 @@ export function AudioPlayerChart({
     return { points, maxDecibel };
   }, [data, chartWidth, threshold, maxTime]);
   
-  // 打鼾高亮区域（用于渲染和点击检测）
-  const snoreRegions = useMemo(() => {
-    if (snoreEvents.length === 0 || !maxTime) return [];
-    
-    return snoreEvents.map((event) => ({
-      x: (event.startTime / maxTime) * chartWidth,
-      width: Math.max(8, ((event.endTime - event.startTime) / maxTime) * chartWidth),
-      event,
-    }));
-  }, [snoreEvents, maxTime, chartWidth]);
-  
   // 当前播放位置 X 坐标
   const currentPositionX = useMemo(() => {
     if (!maxTime) return 0;
@@ -152,45 +139,28 @@ export function AudioPlayerChart({
     onThresholdChange?.(value);
   }, [onThresholdChange]);
   
-  // 点击图表处理：找到最近的打鼾区域并跳转
+  // 点击图表处理：找到最近的红色波形条（超阈值）并跳转
   const handleChartPress = useCallback((event: GestureResponderEvent) => {
-    if (snoreEvents.length === 0) return;
-    
     const touchX = event.nativeEvent.locationX;
-    const touchTime = (touchX / chartWidth) * maxTime;
     
-    // 检查是否点击在某个打鼾区域内
-    for (const region of snoreRegions) {
-      if (touchX >= region.x && touchX <= region.x + region.width) {
-        // 点击在打鼾区域内，跳转到该区域开始
-        try {
-          player.seekTo(region.event.startTime / 1000);
-          if (!status?.playing) {
-            player.play();
-          }
-        } catch (e) {
-          console.error('Seek error:', e);
-        }
-        return;
-      }
-    }
-    
-    // 没有点击在打鼾区域内，找最近的打鼾区域
-    let nearestEvent: SnoreEvent | null = null;
+    // 找到最近的红色波形条（超阈值的点）
+    let nearestRedPoint: { timestamp: number; x: number } | null = null;
     let minDistance = Infinity;
     
-    for (const event of snoreEvents) {
-      const eventCenterTime = (event.startTime + event.endTime) / 2;
-      const distance = Math.abs(touchTime - eventCenterTime);
-      if (distance < minDistance) {
-        minDistance = distance;
-        nearestEvent = event;
+    for (const point of chartData.points) {
+      if (point.decibel >= localThreshold) {
+        const distance = Math.abs(touchX - point.x);
+        if (distance < minDistance) {
+          minDistance = distance;
+          nearestRedPoint = point;
+        }
       }
     }
     
-    if (nearestEvent) {
+    // 如果找到了红色波形条且在50像素内，跳转到该位置
+    if (nearestRedPoint && minDistance < 50) {
       try {
-        player.seekTo(nearestEvent.startTime / 1000);
+        player.seekTo(nearestRedPoint.timestamp / 1000);
         if (!status?.playing) {
           player.play();
         }
@@ -198,7 +168,7 @@ export function AudioPlayerChart({
         console.error('Seek error:', e);
       }
     }
-  }, [snoreEvents, snoreRegions, chartWidth, maxTime, player, status?.playing]);
+  }, [chartData.points, localThreshold, player, status?.playing]);
   
   // 播放/暂停
   const handlePlayPause = useCallback(() => {
@@ -236,7 +206,7 @@ export function AudioPlayerChart({
       <View style={styles.chartRow}>
         {/* 图表区域 */}
         <TouchableOpacity
-          style={[styles.chartArea, { height: chartHeight, width: chartWidth }]}
+          style={{ height: chartHeight, width: chartWidth, overflow: 'hidden' }}
           onPress={handleChartPress}
           activeOpacity={0.9}
         >
@@ -267,13 +237,19 @@ export function AudioPlayerChart({
           {chartData.points.map((point, index) => {
             const barHeight = Math.max(2, (point.decibel / (chartData.maxDecibel || 100)) * chartHeight * 0.85);
             const isAboveLocalThreshold = point.decibel >= localThreshold;
+            // 确保波形条不超出左边界
+            const barLeft = Math.max(0, point.x - 1);
+            // 确保波形条不超出右边界
+            const barWidth = Math.min(2, chartWidth - barLeft);
+            if (barWidth <= 0) return null;
             return (
               <View
                 key={index}
                 style={[
                   styles.waveformBar,
                   {
-                    left: point.x - 1,
+                    left: barLeft,
+                    width: barWidth,
                     height: barHeight,
                     bottom: 0,
                     backgroundColor: isAboveLocalThreshold ? '#F44336' : '#6C63FF',
@@ -316,20 +292,22 @@ export function AudioPlayerChart({
 
         {/* 右侧垂直阈值滑块 */}
         <View style={[styles.thresholdSliderContainer, { height: chartHeight }]}>
-          <View style={styles.verticalSliderWrapper}>
-            <Slider
-              style={[styles.verticalSlider, { width: chartHeight, height: THRESHOLD_SLIDER_WIDTH }]}
-              minimumValue={0}
-              maximumValue={chartData.maxDecibel || 100}
-              step={1}
-              value={localThreshold}
-              onValueChange={handleThresholdChange}
-              onSlidingComplete={handleThresholdComplete}
-              minimumTrackTintColor="#FF9800"
-              maximumTrackTintColor={isDark ? '#333' : '#E0E0E0'}
-              thumbTintColor="#FF9800"
-              inverted={true}
-            />
+          <View style={styles.verticalSliderWrapper} pointerEvents="box-none">
+            <View pointerEvents="auto">
+              <Slider
+                style={[styles.verticalSlider, { width: chartHeight, height: THRESHOLD_SLIDER_WIDTH }]}
+                minimumValue={0}
+                maximumValue={chartData.maxDecibel || 100}
+                step={1}
+                value={localThreshold}
+                onValueChange={handleThresholdChange}
+                onSlidingComplete={handleThresholdComplete}
+                minimumTrackTintColor="#FF9800"
+                maximumTrackTintColor={isDark ? '#333' : '#E0E0E0'}
+                thumbTintColor="#FF9800"
+                inverted={true}
+              />
+            </View>
           </View>
         </View>
       </View>
@@ -369,7 +347,6 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   chartArea: {
-    width: '100%',
     overflow: 'hidden',
     // borderRadius: 8,
   },
@@ -386,10 +363,6 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     height: 1,
-  },
-  snoreRegion: {
-    position: 'absolute',
-    top: 0,
   },
   thresholdLine: {
     position: 'absolute',
@@ -502,6 +475,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     transform: [{ rotate: '-90deg' }],
+    pointerEvents: 'box-none',
   },
   verticalSlider: {
     // width and height set dynamically in component
