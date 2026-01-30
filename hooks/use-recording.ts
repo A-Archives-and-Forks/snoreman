@@ -148,11 +148,9 @@ export function useRecording(): UseRecordingResult {
           };
           
           decibelDataRef.current.push(dataPoint);
-          // 只保留最近的数据用于实时显示，避免内存和性能问题
-          if (decibelDataRef.current.length > 120) {
-            decibelDataRef.current = decibelDataRef.current.slice(-120);
-          }
-          setDecibelData([...decibelDataRef.current]);
+          // 实时显示只展示最近10个数据点，但保留完整数据用于保存
+          const displayData = decibelDataRef.current.slice(-10);
+          setDecibelData([...displayData]);
           setCurrentDecibel(decibel);
         } catch (e) {
         }

@@ -293,8 +293,8 @@ export function LiveWaveform({ recentData, height = 60, threshold = SNORE_THRESH
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
   
-  // 只显示最近的数据点，最多60个
-  const MAX_BARS = 60;
+  // 只显示最近的数据点，最多10个
+  const MAX_BARS = 10;
   const displayData = recentData.slice(-MAX_BARS);
   const dataCount = displayData.length || 1;
   
