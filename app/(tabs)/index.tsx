@@ -382,7 +382,7 @@ export default function HomeScreen() {
           activeOpacity={0.8}
         >
           {isRecording ? (
-            <Ionicons name="stop-circle" size={32} color="#FFFFFF" />
+            <Ionicons name="square" size={28} color="#FFFFFF" />
           ) : (
             <Ionicons name="mic" size={32} color="#FFFFFF" />
           )}
