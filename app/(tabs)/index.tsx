@@ -286,11 +286,9 @@ export default function HomeScreen() {
               <ThemedText style={styles.decibelUnit}>dB</ThemedText>
             </View>
             
-            {isSnoring && (
-              <View style={styles.snoringAlert}>
-                <ThemedText style={styles.snoringAlertText}>检测到打鼾</ThemedText>
-              </View>
-            )}
+            <View style={[styles.snoringAlert, { opacity: isSnoring ? 1 : 0 }]}>
+              <ThemedText style={styles.snoringAlertText}>检测到打鼾</ThemedText>
+            </View>
           </View>
           
           {/* 实时波形图 */}
@@ -419,10 +417,10 @@ const styles = StyleSheet.create({
     marginVertical: 8,
     borderRadius: 16,
     padding: 16,
+    overflow: 'hidden',
   },
   decibelDisplay: {
     alignItems: 'center',
-    marginBottom: 12,
   },
   decibelHeader: {
     flexDirection: 'row',
@@ -469,6 +467,7 @@ const styles = StyleSheet.create({
   },
   waveformContainer: {
     marginVertical: 12,
+    overflow: 'hidden',
   },
   statsRow: {
     flexDirection: 'row',

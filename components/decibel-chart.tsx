@@ -289,16 +289,20 @@ interface LiveWaveformProps {
   threshold?: number;
 }
 
-export function LiveWaveform({ recentData, width = DEFAULT_WIDTH, height = 60, threshold = SNORE_THRESHOLD_DB }: LiveWaveformProps) {
+export function LiveWaveform({ recentData, height = 60, threshold = SNORE_THRESHOLD_DB }: LiveWaveformProps) {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
   
-  // 只显示最近的数据点
-  const displayData = recentData.slice(-60); // 最近30秒的数据
-  const barWidth = width / 60;
+  // 只显示最近的数据点，最多60个
+  const MAX_BARS = 60;
+  const displayData = recentData.slice(-MAX_BARS);
+  const dataCount = displayData.length || 1;
+  
+  // 计算每个条的宽度百分比，留出微小间隙
+  const barWidthPercent = (100 / MAX_BARS) * 0.95;
   
   return (
-    <View style={[styles.liveWaveform, { width, height, backgroundColor: isDark ? '#1A1A1A' : '#F8F9FA' }]}>
+    <View style={[styles.liveWaveform, { height, backgroundColor: isDark ? '#1A1A1A' : '#F8F9FA' }]}>
       {displayData.map((point, index) => {
         const barHeight = Math.max(4, (point.decibel / 100) * height * 0.9);
         const isAboveThreshold = point.decibel >= threshold;
@@ -308,10 +312,11 @@ export function LiveWaveform({ recentData, width = DEFAULT_WIDTH, height = 60, t
             style={[
               styles.liveBar,
               {
-                width: barWidth - 2,
+                width: `${barWidthPercent}%`,
                 height: barHeight,
                 backgroundColor: isAboveThreshold ? '#F44336' : '#6C63FF',
-                opacity: 0.3 + (index / displayData.length) * 0.7,
+                opacity: 0.3 + (index / dataCount) * 0.7,
+                marginRight: index < displayData.length - 1 ? 1 : 0,
               },
             ]}
           />
@@ -433,11 +438,9 @@ const styles = StyleSheet.create({
   liveWaveform: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    borderRadius: 8,
-    paddingHorizontal: 2,
+    overflow: 'hidden',
   },
   liveBar: {
-    marginHorizontal: 1,
-    borderRadius: 2,
+    // no border radius
   },
 });
