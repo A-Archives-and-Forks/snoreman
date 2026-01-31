@@ -18,7 +18,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { AudioPlayerChart } from '@/components/audio-player-chart';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { Colors } from '@/constants/theme';
 import i18n from '@/i18n';
 import {
@@ -201,8 +201,8 @@ export default function RecordingDetailScreen() {
               accessibilityLabel={i18n.t('recording.toggleOrientation')}
               accessibilityRole="button"
             >
-              <Ionicons 
-                name="scan-outline" 
+              <MaterialIcons 
+                name="screen-rotation" 
                 size={22} 
                 color={isDark ? '#fff' : '#333'} 
               />
