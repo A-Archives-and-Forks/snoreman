@@ -18,7 +18,11 @@
     "recordingInProgress": "Recording in progress",
     "viewDetailsHint": "Please stop current recording first",
     "emptyData": "Recording data is empty",
-    "saveError": "Failed to save recording"
+    "saveError": "Failed to save recording",
+    "recordingTips": "Usage Tips",
+    "tipCharging": "Keep phone charging",
+    "tipPosition": "Place near bedside",
+    "tipScreenOff": "Screen-off recording supported"
   },
   "recording": {
     "title": "Recording Details",

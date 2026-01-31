@@ -18,7 +18,11 @@
     "recordingInProgress": "正在录音",
     "viewDetailsHint": "请先结束当前录音",
     "emptyData": "录音数据为空",
-    "saveError": "无法保存录音"
+    "saveError": "无法保存录音",
+    "recordingTips": "使用建议",
+    "tipCharging": "手机保持充电",
+    "tipPosition": "放在靠近床头位置",
+    "tipScreenOff": "支持熄屏录音"
   },
   "recording": {
     "title": "录音详情",

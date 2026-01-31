@@ -16,6 +16,7 @@ import { File, Paths } from 'expo-file-system';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { LiveWaveform } from '@/components/decibel-chart';
+import { RecordingTipsModal } from '@/components/recording-tips-modal';
 import { Ionicons } from '@expo/vector-icons';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useRecording } from '@/hooks/use-recording';
@@ -68,6 +69,7 @@ function getSeverityText(severity: string): string {
 export default function HomeScreen() {
   const [recordings, setRecordings] = useState<RecordingMeta[]>([]);
   const [threshold, setThreshold] = useState(SNORE_THRESHOLD_DB);
+  const [isTipsModalVisible, setIsTipsModalVisible] = useState(false);
   
   const {
     isRecording,
@@ -105,7 +107,11 @@ export default function HomeScreen() {
     }, [loadRecordings])
   );
 
-  const handleStartRecording = async () => {
+  const handleStartRecording = () => {
+    setIsTipsModalVisible(true);
+  };
+
+  const handleConfirmStartRecording = async () => {
     await startRecording();
   };
 
@@ -374,6 +380,13 @@ export default function HomeScreen() {
           {isRecording ? i18n.t('home.stopRecording') : i18n.t('home.startRecording')}
         </ThemedText>
       </View>
+
+      {/* 录音提示弹窗 */}
+      <RecordingTipsModal
+        visible={isTipsModalVisible}
+        onClose={() => setIsTipsModalVisible(false)}
+        onStartRecording={handleConfirmStartRecording}
+      />
     </ThemedView>
   );
 }
