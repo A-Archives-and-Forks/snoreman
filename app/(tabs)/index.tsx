@@ -253,10 +253,25 @@ export default function HomeScreen() {
   return (
     <ThemedView style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.header}>
-        <ThemedText style={styles.title}>{i18n.t('home.title')}</ThemedText>
-        <ThemedText style={styles.subtitle}>
-          {i18n.t('home.subtitle')}
-        </ThemedText>
+        <View style={styles.headerLeft}>
+          <ThemedText style={styles.title}>{i18n.t('home.title')}</ThemedText>
+          <ThemedText style={styles.subtitle}>
+            {i18n.t('home.subtitle')}
+          </ThemedText>
+        </View>
+        <TouchableOpacity
+          onPress={() => router.push('/settings')}
+          style={styles.settingsButton}
+          activeOpacity={0.7}
+          accessibilityLabel={i18n.t('settings.title')}
+          accessibilityRole="button"
+        >
+          <Ionicons 
+            name="settings-outline" 
+            size={24} 
+            color={isDark ? '#fff' : '#333'} 
+          />
+        </TouchableOpacity>
       </View>
 
       {isRecording && (
@@ -368,9 +383,18 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   header: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
     paddingHorizontal: 24,
     paddingTop: 36,
     paddingBottom: 30,
+  },
+  headerLeft: {
+    flex: 1,
+  },
+  settingsButton: {
+    padding: 8,
   },
   title: {
     paddingTop: 12,
