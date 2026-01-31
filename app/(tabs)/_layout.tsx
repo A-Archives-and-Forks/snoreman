@@ -3,6 +3,7 @@ import React from 'react';
 
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import i18n from '@/i18n';
 
 export default function TabLayout() {
   const colorScheme = useColorScheme();
@@ -17,7 +18,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: '睡眠记录',
+          title: i18n.t('home.title'),
         }}
       />
     </Tabs>

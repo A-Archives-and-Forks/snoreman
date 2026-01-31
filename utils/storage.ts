@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { File, Paths } from 'expo-file-system';
+import i18n from '@/i18n';
 
 // 分贝数据点 - 每秒一个采样点
 export interface DecibelDataPoint {
@@ -405,17 +406,21 @@ export function formatDate(timestamp: number): string {
   yesterday.setDate(yesterday.getDate() - 1);
   const isYesterday = date.toDateString() === yesterday.toDateString();
   
-  const timeStr = date.toLocaleTimeString('zh-CN', { 
+  const locale = i18n.locale === 'zh' ? 'zh-CN' : 'en-US';
+  const todayLabel = i18n.t('common.today');
+  const yesterdayLabel = i18n.t('common.yesterday');
+  
+  const timeStr = date.toLocaleTimeString(locale, { 
     hour: '2-digit', 
     minute: '2-digit' 
   });
   
   if (isToday) {
-    return `今天 ${timeStr}`;
+    return `${todayLabel} ${timeStr}`;
   } else if (isYesterday) {
-    return `昨天 ${timeStr}`;
+    return `${yesterdayLabel} ${timeStr}`;
   } else {
-    return date.toLocaleDateString('zh-CN', {
+    return date.toLocaleDateString(locale, {
       month: 'short',
       day: 'numeric',
       hour: '2-digit',

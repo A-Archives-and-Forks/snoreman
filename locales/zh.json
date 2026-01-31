@@ -1,0 +1,64 @@
+{
+  "home": {
+    "title": "睡眠记录",
+    "subtitle": "记录您的睡眠，分析打鼾情况",
+    "emptyTitle": "还没有录音记录",
+    "emptySubtitle": "点击下方按钮开始录制睡眠音频",
+    "startRecording": "开始录音",
+    "stopRecording": "停止录音",
+    "recording": "录音中",
+    "snoreDetected": "检测到打鼾",
+    "thresholdLabel": "打鼾阈值",
+    "thresholdQuiet": "安静 20",
+    "thresholdNoisy": "嘈杂 80",
+    "delete": "删除",
+    "deleteConfirmTitle": "删除录音",
+    "deleteConfirmMessage": "确定要删除这条录音吗？",
+    "cancel": "取消",
+    "recordingInProgress": "正在录音",
+    "viewDetailsHint": "请先结束当前录音",
+    "emptyData": "录音数据为空",
+    "saveError": "无法保存录音"
+  },
+  "recording": {
+    "title": "录音详情",
+    "loading": "加载中...",
+    "back": "返回",
+    "toggleOrientation": "切换屏幕方向",
+    "legendNormal": "正常",
+    "legendOverThreshold": "超阈值",
+    "legendThreshold": "阈值",
+    "hintText": "点击红色波形跳转播放，拖动右侧滑块调节阈值",
+    "noDataTitle": "此录音没有分贝数据",
+    "noDataSubtitle": "旧版本录音不包含分贝监测数据",
+    "overThresholdCount": "超阈值次数",
+    "avgDecibel": "平均分贝",
+    "maxDecibel": "最大分贝",
+    "export": "导出录音",
+    "delete": "删除",
+    "deleteConfirmTitle": "删除录音",
+    "deleteConfirmMessage": "确定要删除这条录音吗？此操作无法撤销。",
+    "exportNotSupported": "当前设备不支持分享功能",
+    "fileNotFound": "录音文件不存在",
+    "exportFailed": "导出失败",
+    "orientationFailed": "无法切换屏幕方向"
+  },
+  "analysis": {
+    "none": "无打鼾",
+    "mild": "轻微",
+    "moderate": "中等",
+    "severe": "严重",
+    "unknown": "未知",
+    "pending": "待分析"
+  },
+  "settings": {
+    "title": "设置",
+    "language": "语言",
+    "english": "English",
+    "chinese": "中文"
+  },
+  "common": {
+    "today": "今天",
+    "yesterday": "昨天"
+  }
+}

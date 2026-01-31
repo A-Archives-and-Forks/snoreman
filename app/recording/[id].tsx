@@ -20,6 +20,7 @@ import { AudioPlayerChart } from '@/components/audio-player-chart';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '@/constants/theme';
+import i18n from '@/i18n';
 import {
   Recording,
   getRecording,
@@ -86,17 +87,17 @@ export default function RecordingDetailScreen() {
   const handleDelete = () => {
     if (!recording) return;
     
-    Alert.alert('删除录音', '确定要删除这条录音吗？此操作无法撤销。', [
-      { text: '取消', style: 'cancel' },
+    Alert.alert(i18n.t('recording.deleteConfirmTitle'), i18n.t('recording.deleteConfirmMessage'), [
+      { text: i18n.t('home.cancel'), style: 'cancel' },
       {
-        text: '删除',
+        text: i18n.t('recording.delete'),
         style: 'destructive',
         onPress: async () => {
           try {
             await deleteRecording(recording.id);
             router.back();
           } catch (error) {
-            Alert.alert('错误', '删除失败，请重试');
+            Alert.alert(i18n.t('recording.delete'), i18n.t('recording.exportFailed'));
           }
         },
       },
@@ -111,14 +112,14 @@ export default function RecordingDetailScreen() {
       // 检查是否支持分享
       const isAvailable = await Sharing.isAvailableAsync();
       if (!isAvailable) {
-        Alert.alert('不支持', '当前设备不支持分享功能');
+        Alert.alert(i18n.t('recording.exportNotSupported'), i18n.t('recording.exportNotSupported'));
         return;
       }
       
       // 检查文件是否存在
       const sourceFile = new File(recording.uri);
       if (!sourceFile.exists) {
-        Alert.alert('错误', '录音文件不存在');
+        Alert.alert(i18n.t('recording.fileNotFound'), i18n.t('recording.fileNotFound'));
         return;
       }
       
@@ -126,7 +127,8 @@ export default function RecordingDetailScreen() {
       const date = new Date(recording.createdAt);
       const dateStr = `${date.getFullYear()}${(date.getMonth() + 1).toString().padStart(2, '0')}${date.getDate().toString().padStart(2, '0')}`;
       const timeStr = `${date.getHours().toString().padStart(2, '0')}${date.getMinutes().toString().padStart(2, '0')}`;
-      const fileName = `睡眠录音_${dateStr}_${timeStr}.m4a`;
+      const fileNamePrefix = i18n.locale === 'zh' ? '睡眠录音' : 'sleep_recording';
+      const fileName = `${fileNamePrefix}_${dateStr}_${timeStr}.m4a`;
       
       // 复制到临时目录并重命名
       const tempFile = new File(Paths.cache, fileName);
@@ -135,7 +137,7 @@ export default function RecordingDetailScreen() {
       // 分享文件
       await Sharing.shareAsync(tempFile.uri, {
         mimeType: 'audio/mp4',
-        dialogTitle: '导出录音',
+        dialogTitle: i18n.t('recording.export'),
         UTI: 'public.mpeg-4-audio',
       });
       
@@ -146,7 +148,7 @@ export default function RecordingDetailScreen() {
         // 忽略清理错误
       }
     } catch (error) {
-      Alert.alert('错误', '导出失败，请重试');
+      Alert.alert(i18n.t('recording.exportFailed'), i18n.t('recording.exportFailed'));
     }
   };
 
@@ -169,14 +171,14 @@ export default function RecordingDetailScreen() {
         setIsLandscape(true);
       }
     } catch (error) {
-      Alert.alert('提示', '无法切换屏幕方向，请确保设备支持旋转');
+      Alert.alert(i18n.t('recording.toggleOrientation'), i18n.t('recording.orientationFailed'));
     }
   };
 
   if (!recording) {
     return (
       <ThemedView style={[styles.container, styles.centerContent]}>
-        <Stack.Screen options={{ title: '加载中...' }} />
+        <Stack.Screen options={{ title: i18n.t('recording.loading') }} />
         <ActivityIndicator size="large" color={colors.tint} />
       </ThemedView>
     );
@@ -189,14 +191,14 @@ export default function RecordingDetailScreen() {
     <ThemedView style={styles.container}>
       <Stack.Screen
         options={{
-          title: '录音详情',
-          headerBackTitle: '返回',
+          title: i18n.t('recording.title'),
+          headerBackTitle: i18n.t('recording.back'),
           headerRight: () => (
             <TouchableOpacity
               onPress={toggleOrientation}
               style={{ padding: 8 }}
               activeOpacity={0.7}
-              accessibilityLabel="切换屏幕方向"
+              accessibilityLabel={i18n.t('recording.toggleOrientation')}
               accessibilityRole="button"
             >
               <Ionicons 
@@ -227,15 +229,15 @@ export default function RecordingDetailScreen() {
             <View style={styles.legendRow}>
               <View style={styles.legendItem}>
                 <View style={[styles.legendDot, { backgroundColor: '#6C63FF' }]} />
-                <ThemedText style={styles.legendText}>正常</ThemedText>
+                <ThemedText style={styles.legendText}>{i18n.t('recording.legendNormal')}</ThemedText>
               </View>
               <View style={styles.legendItem}>
                 <View style={[styles.legendDot, { backgroundColor: '#F44336' }]} />
-                <ThemedText style={styles.legendText}>超阈值</ThemedText>
+                <ThemedText style={styles.legendText}>{i18n.t('recording.legendOverThreshold')}</ThemedText>
               </View>
               <View style={styles.legendItem}>
                 <View style={[styles.legendLine, { backgroundColor: '#FF9800' }]} />
-                <ThemedText style={styles.legendText}>阈值 {threshold}dB</ThemedText>
+                <ThemedText style={styles.legendText}>{i18n.t('recording.legendThreshold')} {threshold}dB</ThemedText>
               </View>
             </View>
 
@@ -261,7 +263,7 @@ export default function RecordingDetailScreen() {
 
             {/* 说明文字 */}
             <ThemedText style={styles.hintText}>
-              点击红色波形跳转播放，拖动右侧滑块调节阈值
+              {i18n.t('recording.hintText')}
             </ThemedText>
           </View>
         ) : (
@@ -273,10 +275,10 @@ export default function RecordingDetailScreen() {
           >
             <View style={styles.noDataContainer}>
               <ThemedText style={styles.noDataText}>
-                此录音没有分贝数据
+                {i18n.t('recording.noDataTitle')}
               </ThemedText>
               <ThemedText style={styles.noDataSubtext}>
-                旧版本录音不包含分贝监测数据
+                {i18n.t('recording.noDataSubtitle')}
               </ThemedText>
             </View>
           </View>
@@ -295,21 +297,21 @@ export default function RecordingDetailScreen() {
                 <ThemedText style={styles.statValue}>
                   {decibelData.filter(d => d.decibel >= threshold).length}
                 </ThemedText>
-                <ThemedText style={styles.statLabel}>超阈值次数</ThemedText>
+                <ThemedText style={styles.statLabel}>{i18n.t('recording.overThresholdCount')}</ThemedText>
               </View>
               <View style={styles.statDivider} />
               <View style={styles.statItem}>
                 <ThemedText style={styles.statValue}>
                   {Math.round(decibelData.length > 0 ? decibelData.reduce((a, b) => a + b.decibel, 0) / decibelData.length : 0)}
                 </ThemedText>
-                <ThemedText style={styles.statLabel}>平均分贝</ThemedText>
+                <ThemedText style={styles.statLabel}>{i18n.t('recording.avgDecibel')}</ThemedText>
               </View>
               <View style={styles.statDivider} />
               <View style={styles.statItem}>
                 <ThemedText style={styles.statValue}>
                   {Math.max(...decibelData.map(d => d.decibel), 0)}
                 </ThemedText>
-                <ThemedText style={styles.statLabel}>最大分贝</ThemedText>
+                <ThemedText style={styles.statLabel}>{i18n.t('recording.maxDecibel')}</ThemedText>
               </View>
             </View>
           </View>
@@ -321,20 +323,20 @@ export default function RecordingDetailScreen() {
             style={styles.exportButton}
             onPress={handleExport}
             activeOpacity={0.8}
-            accessibilityLabel="导出录音文件"
+            accessibilityLabel={i18n.t('recording.export')}
             accessibilityRole="button"
           >
-            <ThemedText style={styles.exportButtonText}>导出录音</ThemedText>
+            <ThemedText style={styles.exportButtonText}>{i18n.t('recording.export')}</ThemedText>
           </TouchableOpacity>
 
           <TouchableOpacity
             style={styles.deleteButton}
             onPress={handleDelete}
             activeOpacity={0.8}
-            accessibilityLabel="删除此录音"
+            accessibilityLabel={i18n.t('recording.delete')}
             accessibilityRole="button"
           >
-            <ThemedText style={styles.deleteButtonText}>删除</ThemedText>
+            <ThemedText style={styles.deleteButtonText}>{i18n.t('recording.delete')}</ThemedText>
           </TouchableOpacity>
         </View>
       </ScrollView>

@@ -20,6 +20,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useRecording } from '@/hooks/use-recording';
 import { Colors } from '@/constants/theme';
+import i18n from '@/i18n';
 import {
   Recording as RecordingData,
   RecordingMeta,
@@ -52,15 +53,15 @@ function getSeverityColor(severity: string): string {
 function getSeverityText(severity: string): string {
   switch (severity) {
     case 'none':
-      return '无打鼾';
+      return i18n.t('analysis.none');
     case 'mild':
-      return '轻微';
+      return i18n.t('analysis.mild');
     case 'moderate':
-      return '中等';
+      return i18n.t('analysis.moderate');
     case 'severe':
-      return '严重';
+      return i18n.t('analysis.severe');
     default:
-      return '未知';
+      return i18n.t('analysis.unknown');
   }
 }
 
@@ -156,18 +157,18 @@ export default function HomeScreen() {
         await saveRecording(newRecording);
         await loadRecordings();
       } else {
-        Alert.alert('提示', '录音数据为空');
+        Alert.alert(i18n.t('home.recordingInProgress'), i18n.t('home.emptyData'));
       }
     } catch (err) {
-      Alert.alert('错误', '无法保存录音: ' + (err as Error).message);
+      Alert.alert(i18n.t('home.saveError'), (err as Error).message);
     }
   };
 
   const handleDelete = (id: string) => {
-    Alert.alert('删除录音', '确定要删除这条录音吗？', [
-      { text: '取消', style: 'cancel' },
+    Alert.alert(i18n.t('home.deleteConfirmTitle'), i18n.t('home.deleteConfirmMessage'), [
+      { text: i18n.t('home.cancel'), style: 'cancel' },
       {
-        text: '删除',
+        text: i18n.t('home.delete'),
         style: 'destructive',
         onPress: async () => {
           await deleteRecording(id);
@@ -201,11 +202,11 @@ export default function HomeScreen() {
       <TouchableOpacity
         style={styles.deleteAction}
         onPress={() => handleDirectDelete(itemId)}
-        accessibilityLabel="删除录音"
+        accessibilityLabel={i18n.t('home.delete')}
         accessibilityRole="button"
       >
         <Animated.View style={{ transform: [{ scale }] }}>
-          <ThemedText style={styles.deleteActionText}>删除</ThemedText>
+          <ThemedText style={styles.deleteActionText}>{i18n.t('home.delete')}</ThemedText>
         </Animated.View>
       </TouchableOpacity>
     );
@@ -220,7 +221,7 @@ export default function HomeScreen() {
         style={[styles.recordingItem, { backgroundColor: isDark ? '#1E1E1E' : '#F8F9FA' }]}
         onPress={() => {
           if (isRecording) {
-            Alert.alert('提示', '请先结束当前录音，再查看录音详情');
+            Alert.alert(i18n.t('home.recordingInProgress'), i18n.t('home.viewDetailsHint'));
             return;
           }
           router.push(`/recording/${item.id}` as any);
@@ -242,7 +243,7 @@ export default function HomeScreen() {
           </View>
         ) : (
           <View style={[styles.analysisTag, { backgroundColor: '#9E9E9E' }]}>
-            <ThemedText style={styles.analysisTagText}>待分析</ThemedText>
+            <ThemedText style={styles.analysisTagText}>{i18n.t('analysis.pending')}</ThemedText>
           </View>
         )}
       </TouchableOpacity>
@@ -252,9 +253,9 @@ export default function HomeScreen() {
   return (
     <ThemedView style={[styles.container, { paddingTop: insets.top }]}>
       <View style={styles.header}>
-        <ThemedText style={styles.title}>睡眠记录</ThemedText>
+        <ThemedText style={styles.title}>{i18n.t('home.title')}</ThemedText>
         <ThemedText style={styles.subtitle}>
-          记录您的睡眠，分析打鼾情况
+          {i18n.t('home.subtitle')}
         </ThemedText>
       </View>
 
@@ -277,7 +278,7 @@ export default function HomeScreen() {
             </View>
             
             <View style={[styles.snoringAlert, { opacity: isSnoring ? 1 : 0 }]}>
-              <ThemedText style={styles.snoringAlertText}>检测到打鼾</ThemedText>
+              <ThemedText style={styles.snoringAlertText}>{i18n.t('home.snoreDetected')}</ThemedText>
             </View>
           </View>
           
@@ -289,7 +290,7 @@ export default function HomeScreen() {
           {/* 阈值调节 */}
           <View style={styles.thresholdContainer}>
             <View style={styles.thresholdHeader}>
-              <ThemedText style={styles.thresholdLabel}>打鼾阈值</ThemedText>
+              <ThemedText style={styles.thresholdLabel}>{i18n.t('home.thresholdLabel')}</ThemedText>
               <ThemedText style={styles.thresholdValue}>{threshold} dB</ThemedText>
             </View>
             <Slider
@@ -307,8 +308,8 @@ export default function HomeScreen() {
               thumbTintColor="#6C63FF"
             />
             <View style={styles.thresholdHints}>
-              <ThemedText style={styles.thresholdHint}>安静 20</ThemedText>
-              <ThemedText style={styles.thresholdHint}>80 嘈杂</ThemedText>
+              <ThemedText style={styles.thresholdHint}>{i18n.t('home.thresholdQuiet')}</ThemedText>
+              <ThemedText style={styles.thresholdHint}>{i18n.t('home.thresholdNoisy')}</ThemedText>
             </View>
           </View>
         </View>
@@ -328,10 +329,10 @@ export default function HomeScreen() {
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
             <ThemedText style={styles.emptyText}>
-              还没有录音记录
+              {i18n.t('home.emptyTitle')}
             </ThemedText>
             <ThemedText style={styles.emptySubtext}>
-              点击下方按钮开始录制睡眠音频
+              {i18n.t('home.emptySubtitle')}
             </ThemedText>
           </View>
         }
@@ -345,7 +346,7 @@ export default function HomeScreen() {
           ]}
           onPress={isRecording ? handleStopRecording : handleStartRecording}
           activeOpacity={0.8}
-          accessibilityLabel={isRecording ? '停止录音' : '开始录音'}
+          accessibilityLabel={isRecording ? i18n.t('home.stopRecording') : i18n.t('home.startRecording')}
           accessibilityRole="button"
         >
           {isRecording ? (
@@ -355,7 +356,7 @@ export default function HomeScreen() {
           )}
         </TouchableOpacity>
         <ThemedText style={styles.buttonLabel}>
-          {isRecording ? '停止录音' : '开始录音'}
+          {isRecording ? i18n.t('home.stopRecording') : i18n.t('home.startRecording')}
         </ThemedText>
       </View>
     </ThemedView>
