@@ -11,7 +11,43 @@ import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import { DecibelDataPoint } from '@/utils/storage';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { ThemedText } from '@/components/themed-text';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, AntDesign } from '@expo/vector-icons';
+
+// 15秒跳转按钮组件
+interface SkipButtonProps {
+  direction: 'backward' | 'forward';
+  onPress: () => void;
+  size?: number;
+}
+
+function SkipButton({ direction, onPress, size = 48 }: SkipButtonProps) {
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === 'dark';
+  const iconColor = isDark ? '#FFFFFF' : '#6C63FF';
+  const bgColor = isDark ? 'rgba(255,255,255,0.1)' : '#E8E5FF';
+  
+  return (
+    <TouchableOpacity
+      style={[styles.skipButton, { width: size, height: size, backgroundColor: bgColor }]}
+      onPress={onPress}
+      activeOpacity={0.8}
+    >
+      <View style={styles.skipButtonContent}>
+        <AntDesign 
+          name={direction === 'backward' ? 'reload' : 'reload'} 
+          size={28} 
+          color={iconColor}
+          style={{
+            transform: [{ scaleX: direction === 'backward' ? -1 : 1 }],
+          }}
+        />
+        <ThemedText style={[styles.skipButtonText, { color: iconColor }]}>
+          15
+        </ThemedText>
+      </View>
+    </TouchableOpacity>
+  );
+}
 
 interface AudioPlayerChartProps {
   uri: string;
@@ -182,19 +218,19 @@ export function AudioPlayerChart({
     }
   }, [player, status?.playing]);
 
-  // 快退5秒
+  // 快退15秒
   const handleSkipBackward = useCallback(() => {
     try {
-      const newPosition = Math.max(0, currentPosition - 5000);
+      const newPosition = Math.max(0, currentPosition - 15000);
       player.seekTo(newPosition / 1000);
     } catch (e) {
     }
   }, [player, currentPosition]);
 
-  // 快进5秒
+  // 快进15秒
   const handleSkipForward = useCallback(() => {
     try {
-      const newPosition = Math.min(maxTime, currentPosition + 5000);
+      const newPosition = Math.min(maxTime, currentPosition + 15000);
       player.seekTo(newPosition / 1000);
     } catch (e) {
     }
@@ -342,15 +378,10 @@ export function AudioPlayerChart({
 
       {/* 播放控制按钮 */}
       <View style={[styles.controlsRow, { width: chartWidth }]}>
-        <TouchableOpacity
-          style={styles.controlButton}
+        <SkipButton
+          direction="backward"
           onPress={handleSkipBackward}
-          activeOpacity={0.8}
-          accessibilityLabel="快退5秒"
-          accessibilityRole="button"
-        >
-          <Ionicons name="play-back" size={20} color="#6C63FF" />
-        </TouchableOpacity>
+        />
 
         <TouchableOpacity
           style={[styles.controlButton, styles.playControlButton]}
@@ -366,15 +397,10 @@ export function AudioPlayerChart({
           )}
         </TouchableOpacity>
 
-        <TouchableOpacity
-          style={styles.controlButton}
+        <SkipButton
+          direction="forward"
           onPress={handleSkipForward}
-          activeOpacity={0.8}
-          accessibilityLabel="快进5秒"
-          accessibilityRole="button"
-        >
-          <Ionicons name="play-forward" size={20} color="#6C63FF" />
-        </TouchableOpacity>
+        />
       </View>
     </View>
   );
@@ -456,6 +482,32 @@ const styles = StyleSheet.create({
     height: 52,
     borderRadius: 26,
     backgroundColor: '#D4CFFF',
+  },
+  skipButton: {
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  skipButtonContent: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+    width: 28,
+    height: 28,
+  },
+  skipButtonRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  skipButtonText: {
+    fontSize: 10,
+    fontWeight: '800',
+    position: 'absolute',
+    top: '30%',
+    left: '50%',
+    transform: [{ translateX: -6 }, { translateY: -5.9 }],
+    textAlign: 'center',
   },
   sliderContainer: {
     width: '100%',
