@@ -1,8 +1,10 @@
-# Snoreman
-
-<img src="./assets/images/icon.png" alt="Snoreman Icon" width="128" height="128" align="right">
-
-Analyze your snoring
+<div style="display: flex; align-items: center; gap: 16px;">
+  <img src="./assets/images/icon.png" alt="Snoreman Icon" width="64" height="64"/>
+  <div>
+    <h1 style="margin: 0;">Snoreman</h1>
+    <p style="margin: 0;">Analyze your snoring</p>
+  </div>
+</div>
 
 ## Dev
 
