@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import {
   View,
   StyleSheet,
@@ -11,7 +11,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Ionicons } from '@expo/vector-icons';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import i18n, { getCurrentLanguage } from '@/i18n';
+import i18n from '@/i18n';
 
 interface RecordingTipsModalProps {
   visible: boolean;
@@ -24,14 +24,6 @@ const { width } = Dimensions.get('window');
 export function RecordingTipsModal({ visible, onClose, onStartRecording }: RecordingTipsModalProps) {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
-  const [language, setLanguage] = useState(getCurrentLanguage());
-
-  // 监听语言变化，强制重新渲染
-  useEffect(() => {
-    if (visible) {
-      setLanguage(getCurrentLanguage());
-    }
-  }, [visible]);
 
   const handleStart = () => {
     onClose();

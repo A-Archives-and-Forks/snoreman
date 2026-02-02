@@ -21,7 +21,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useRecording } from '@/hooks/use-recording';
 import { Colors } from '@/constants/theme';
-import i18n from '@/i18n';
+import i18n, { getCurrentLanguage } from '@/i18n';
 import {
   Recording as RecordingData,
   RecordingMeta,
@@ -70,6 +70,7 @@ export default function HomeScreen() {
   const [recordings, setRecordings] = useState<RecordingMeta[]>([]);
   const [threshold, setThreshold] = useState(SNORE_THRESHOLD_DB);
   const [isTipsModalVisible, setIsTipsModalVisible] = useState(false);
+  const [currentLanguage, setCurrentLanguage] = useState(getCurrentLanguage());
   
   const {
     isRecording,
@@ -103,8 +104,12 @@ export default function HomeScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      const lang = getCurrentLanguage();
+      if (lang !== currentLanguage) {
+        setCurrentLanguage(lang);
+      }
       loadRecordings();
-    }, [loadRecordings])
+    }, [loadRecordings, currentLanguage])
   );
 
   const handleStartRecording = () => {
@@ -383,6 +388,7 @@ export default function HomeScreen() {
 
       {/* 录音提示弹窗 */}
       <RecordingTipsModal
+        key={currentLanguage}
         visible={isTipsModalVisible}
         onClose={() => setIsTipsModalVisible(false)}
         onStartRecording={handleConfirmStartRecording}
