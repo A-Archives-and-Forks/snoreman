@@ -1,5 +1,7 @@
 # Snoreman
 
+<img src="./assets/images/icon.png" alt="Snoreman Icon" width="128" height="128" align="right">
+
 Analyze your snoring
 
 ## Dev
