@@ -30,6 +30,9 @@ import {
   formatDate,
   analyzeDecibelData,
   SNORE_THRESHOLD_DB,
+  getRecordingFile,
+  needsMigration,
+  migrateRecordingUri,
 } from '@/utils/storage';
 
 export default function RecordingDetailScreen() {
@@ -46,7 +49,15 @@ export default function RecordingDetailScreen() {
 
   const loadRecording = useCallback(async () => {
     if (id) {
-      const data = await getRecording(id);
+      let data = await getRecording(id);
+      
+      // 懒加载迁移：如果录音使用旧格式（完整 URI），自动迁移为新格式（相对路径）
+      if (data && needsMigration(data)) {
+        await migrateRecordingUri(id);
+        // 重新加载以获取更新后的数据
+        data = await getRecording(id);
+      }
+      
       setRecording(data);
       // 加载录音保存的阈值，如果没有则使用默认值
       if (data?.threshold !== undefined) {
@@ -116,8 +127,8 @@ export default function RecordingDetailScreen() {
         return;
       }
       
-      // 检查文件是否存在
-      const sourceFile = new File(recording.uri);
+      // 使用辅助函数获取录音文件（兼容新旧格式）
+      const sourceFile = getRecordingFile(recording);
       if (!sourceFile.exists) {
         Alert.alert(i18n.t('recording.fileNotFound'), i18n.t('recording.fileNotFound'));
         return;

@@ -227,6 +227,43 @@ export async function updateRecording(id: string, updates: Partial<Recording>): 
   }
 }
 
+// 获取录音文件的 File 对象（兼容新旧格式）
+// 新格式：相对路径（文件名）
+// 旧格式：完整 URI（包含 file:// 和 UUID）
+export function getRecordingFile(recordingMeta: RecordingMeta): File {
+  // 新格式：相对路径
+  if (!recordingMeta.uri.includes('://')) {
+    return new File(Paths.document, recordingMeta.uri);
+  }
+  
+  // 旧格式：完整 URI
+  return new File(recordingMeta.uri);
+}
+
+// 检查录音 URI 是否需要迁移（旧格式 -> 新格式）
+export function needsMigration(recordingMeta: RecordingMeta): boolean {
+  return recordingMeta.uri.includes('://');
+}
+
+// 迁移单个录音的 URI（从完整 URI 转换为相对路径）
+export async function migrateRecordingUri(id: string): Promise<void> {
+  try {
+    const metas = await getRecordingsMeta();
+    const index = metas.findIndex((r) => r.id === id);
+    
+    if (index !== -1 && needsMigration(metas[index])) {
+      // 提取文件名（相对路径）
+      const fileName = metas[index].uri.split('/').pop();
+      if (fileName) {
+        metas[index].uri = fileName;
+        await AsyncStorage.setItem(RECORDINGS_META_KEY, JSON.stringify(metas));
+      }
+    }
+  } catch (error) {
+    // 静默处理迁移错误
+  }
+}
+
 // 删除录音
 export async function deleteRecording(id: string): Promise<void> {
   try {
@@ -236,7 +273,7 @@ export async function deleteRecording(id: string): Promise<void> {
     if (meta) {
       // Delete the audio file
       try {
-        const file = new File(meta.uri);
+        const file = getRecordingFile(meta);
         if (file.exists) {
           file.delete();
         }

@@ -10,6 +10,7 @@ import Slider from '@react-native-community/slider';
 import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import { DecibelDataPoint } from '@/utils/storage';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { Paths } from 'expo-file-system';
 import { ThemedText } from '@/components/themed-text';
 import { Ionicons, AntDesign } from '@expo/vector-icons';
 
@@ -88,7 +89,10 @@ export function AudioPlayerChart({
   const isDark = colorScheme === 'dark';
   
   // 播放器
-  const player = useAudioPlayer(uri ? { uri } : null);
+  // uri 是相对路径（文件名），需要拼接完整路径
+  // Paths.document 是 Directory 对象，需要使用 .uri 属性
+  const audioUri = uri ? Paths.document.uri + uri : null;
+  const player = useAudioPlayer(audioUri ? { uri: audioUri } : null);
   const status = useAudioPlayerStatus(player);
   
   const [isSliding, setIsSliding] = useState(false);

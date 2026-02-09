@@ -131,33 +131,33 @@ export default function HomeScreen() {
         // 生成唯一的录音 ID
         const recordingId = Date.now().toString(36) + Math.random().toString(36).substr(2);
         
-        // expo-audio 的 recorder.uri 每次可能返回相同的缓存路径
-        // 必须复制到永久存储位置，使用唯一文件名
-        let finalUri = result.uri;
+        // 创建唯一的文件名（相对路径）
+        const fileName = `recording_${Date.now()}_${recordingId}.m4a`;
         
-        try {
-          const sourceFile = new File(result.uri);
-          if (sourceFile.exists) {
-            // 创建唯一的文件名
-            const uniqueFileName = `recording_${Date.now()}_${recordingId}.m4a`;
-            // 使用 document 目录来永久保存（cache 目录可能被系统清理）
-            const destFile = new File(Paths.document, uniqueFileName);
-            
-            // 复制文件
-            sourceFile.copy(destFile);
-            finalUri = destFile.uri;
-          }
-        } catch (copyError) {
-          // 如果复制失败，继续使用原始 URI
-          // 静默处理，不中断用户流程
+        // 复制文件到 document 目录（持久化存储）
+        const sourceFile = new File(result.uri);
+        const destFile = new File(Paths.document, fileName);
+        
+        // 确保源文件存在
+        if (!sourceFile.exists) {
+          throw new Error('录音文件不存在');
+        }
+        
+        // 复制文件
+        sourceFile.copy(destFile);
+        
+        // 验证文件是否真的复制成功
+        if (!destFile.exists) {
+          throw new Error('文件保存失败');
         }
         
         // 使用当前阈值分析分贝数据
         const analysis = analyzeDecibelData(result.decibelData, threshold);
         
+        // 保存录音元数据（使用相对路径）
         const newRecording: RecordingData = {
           id: recordingId,
-          uri: finalUri,
+          uri: fileName, // 只保存文件名（相对路径）
           createdAt: Date.now(),
           duration: recordingDuration > 0 ? recordingDuration : 1000,
           decibelData: result.decibelData,
