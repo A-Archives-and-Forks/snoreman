@@ -59,7 +59,18 @@
     "title": "设置",
     "language": "语言",
     "english": "English",
-    "chinese": "中文"
+    "chinese": "中文",
+    "reminder": "每日提醒",
+    "reminderDescription": "每天定时提醒您使用呼噜娃录音",
+    "reminderTime": "提醒时间",
+    "notificationPermissionTitle": "需要通知权限",
+    "notificationPermissionMessage": "请在设置中开启通知权限以接收每日提醒",
+    "cancel": "取消",
+    "openSettings": "去设置"
+  },
+  "notification": {
+    "title": "晚安 🌙",
+    "body": "不要忘了用呼噜娃记录您的睡眠哦"
   },
   "common": {
     "today": "今天",

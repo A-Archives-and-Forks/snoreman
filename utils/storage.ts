@@ -493,3 +493,63 @@ export async function getSnoreThreshold(): Promise<number> {
     return SNORE_THRESHOLD_DB;
   }
 }
+
+// 提醒设置存储键
+const REMINDER_ENABLED_KEY = 'reminder_enabled';
+const REMINDER_TIME_KEY = 'reminder_time';
+
+// 默认提醒时间 (22:00)
+export const DEFAULT_REMINDER_TIME = { hour: 22, minute: 0 };
+
+export interface ReminderSettings {
+  enabled: boolean;
+  hour: number;
+  minute: number;
+}
+
+// 保存提醒设置
+export async function saveReminderSettings(settings: ReminderSettings): Promise<void> {
+  try {
+    await AsyncStorage.setItem(REMINDER_ENABLED_KEY, settings.enabled.toString());
+    await AsyncStorage.setItem(REMINDER_TIME_KEY, JSON.stringify({
+      hour: settings.hour,
+      minute: settings.minute,
+    }));
+  } catch (error) {
+    throw error;
+  }
+}
+
+// 获取提醒设置
+export async function getReminderSettings(): Promise<ReminderSettings> {
+  try {
+    const enabledValue = await AsyncStorage.getItem(REMINDER_ENABLED_KEY);
+    const timeValue = await AsyncStorage.getItem(REMINDER_TIME_KEY);
+    
+    let settings: ReminderSettings = {
+      enabled: false,
+      ...DEFAULT_REMINDER_TIME,
+    };
+    
+    if (enabledValue !== null) {
+      settings.enabled = enabledValue === 'true';
+    }
+    
+    if (timeValue !== null) {
+      try {
+        const timeData = JSON.parse(timeValue);
+        settings.hour = timeData.hour ?? DEFAULT_REMINDER_TIME.hour;
+        settings.minute = timeData.minute ?? DEFAULT_REMINDER_TIME.minute;
+      } catch (e) {
+        // 解析失败使用默认值
+      }
+    }
+    
+    return settings;
+  } catch (error) {
+    return {
+      enabled: false,
+      ...DEFAULT_REMINDER_TIME,
+    };
+  }
+}

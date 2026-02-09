@@ -59,7 +59,19 @@
     "title": "Settings",
     "language": "Language",
     "english": "English",
-    "chinese": "中文"
+    "chinese": "中文",
+    "reminder": "Daily Reminder",
+    "reminderDescription": "Remind you to use Snoreman daily",
+    "reminderTime": "Reminder Time",
+    "notificationPermissionTitle": "Notification Permission Required",
+    "notificationPermissionMessage": "Please enable notifications in settings to receive daily reminders",
+    "cancel": "Cancel",
+    "openSettings": "Open Settings"
+  },
+  "notification": {
+    "title": "Good Night 🌙",
+    "body": "Don't forget to record your sleep with Snoreman"
+  },
   },
   "common": {
     "today": "Today",
