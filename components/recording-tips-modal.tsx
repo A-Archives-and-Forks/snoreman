@@ -5,7 +5,6 @@ import {
   TouchableOpacity,
   Modal,
   Image,
-  Dimensions,
 } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -18,8 +17,6 @@ interface RecordingTipsModalProps {
   onClose: () => void;
   onStartRecording: () => void;
 }
-
-const { width } = Dimensions.get('window');
 
 export function RecordingTipsModal({ visible, onClose, onStartRecording }: RecordingTipsModalProps) {
   const colorScheme = useColorScheme();
@@ -97,6 +94,7 @@ const styles = StyleSheet.create({
   container: {
     width: '100%',
     maxWidth: 400,
+    maxHeight: 550,
     borderRadius: 20,
     padding: 24,
     alignItems: 'center',
@@ -114,8 +112,9 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   image: {
-    width: width * 0.7,
-    height: width * 0.5,
+    width: '100%',
+    aspectRatio: 1.4,
+    maxHeight: 200,
     marginBottom: 24,
   },
   tipsContainer: {
