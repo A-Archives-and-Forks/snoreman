@@ -2,7 +2,8 @@
 
 # Snoreman
 
-Analyze your snoring
+Record and analyze your snoring
+
 
 ## Dev
 

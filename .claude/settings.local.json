@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -r \"suggested\\\\|Suggested\\\\|suggestion\\\\|Suggestion\" /Users/timqian/Documents/code/timqian/snoreman --include=*.tsx --include=*.ts)",
+      "Bash(grep -r \"iPad\\\\|ipad\\\\|tablet\\\\|Tablet\\\\|responsive\\\\|Responsive\" /Users/timqian/Documents/code/timqian/snoreman --include=*.tsx --include=*.ts)",
+      "Bash(find /Users/timqian/Documents/code/timqian/snoreman -name *suggested* -o -name *suggestion*)"
+    ]
+  }
+}
