@@ -38,3 +38,6 @@ You can start developing by editing the files inside the **app** directory. This
 ref: 
 - https://docs.expo.dev/deploy/build-project/ 
 - https://docs.expo.dev/deploy/submit-to-app-stores/
+
+## License
+[![License: CC BY-NC-SA 4.0](https://img.shields.io/badge/License-CC%20BY--NC--SA%204.0-lightgrey.svg)](https://creativecommons.org/licenses/by-nc-sa/4.0/)
