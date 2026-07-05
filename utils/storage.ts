@@ -1,12 +1,14 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { File, Paths } from 'expo-file-system';
-import i18n from '@/i18n';
+import i18n, { getDateLocale } from '@/i18n';
+import { encodeDecibelData, decodeDecibelData } from '@/utils/decibel-codec';
+import { analyzeSnoringAuto } from '@/utils/snore-detection';
 
 // 分贝数据点 - 每秒一个采样点
 export interface DecibelDataPoint {
   timestamp: number; // 相对于录音开始的毫秒数
   decibel: number;   // 分贝值 (0-120)
-  isSnoring: boolean; // 是否被识别为打鼾
+  isSnoring?: boolean; // 已废弃：是否打鼾由分析函数产出，不再逐点存储
 }
 
 // 录音元数据（不含分贝数据，用于列表显示）
@@ -35,27 +37,51 @@ export interface SnoreAnalysis {
   severity: 'none' | 'mild' | 'moderate' | 'severe';
   analyzedAt: number;
   snoreEvents: SnoreEvent[]; // 打鼾事件列表
+  method?: 'auto' | 'threshold'; // 分析方式：自动识别 / 固定阈值（旧版）
 }
 
 export interface SnoreEvent {
   startTime: number;  // 开始时间（毫秒）
   endTime: number;    // 结束时间（毫秒）
   maxDecibel: number; // 该事件最大分贝
+  confidence?: number; // 自动识别的置信度 (0~1)
 }
 
 // 打鼾检测阈值 (分贝)
 export const SNORE_THRESHOLD_DB = 45;
-// 最小打鼾持续时间 (毫秒)
-export const MIN_SNORE_DURATION_MS = 1000;
 
 const RECORDINGS_META_KEY = 'sleep_recordings_meta'; // 只存元数据
 const RECORDINGS_KEY = 'sleep_recordings'; // 旧版兼容
-const CURRENT_RECORDING_KEY = 'current_recording_data';
-const SNORE_THRESHOLD_KEY = 'snore_threshold';
 
 // 获取分贝数据的存储 key
 function getDecibelDataKey(id: string): string {
   return `decibel_data_${id}`;
+}
+
+// ---- 高频分贝数据（250ms 采样，二进制文件存储，一晚约 113KB）----
+// 用于打鼾自动识别和将来的算法升级重分析；图表和 AsyncStorage 仍用每秒聚合数据
+
+function getFullRateFile(id: string): File {
+  return new File(Paths.document, `decibel_${id}.bin`);
+}
+
+// 保存录音的高频分贝数据
+export function saveFullRateData(id: string, data: DecibelDataPoint[]): void {
+  try {
+    getFullRateFile(id).write(encodeDecibelData(data));
+  } catch (error) {
+  }
+}
+
+// 读取录音的高频分贝数据（不存在或格式错误时返回 null）
+export function loadFullRateData(id: string): DecibelDataPoint[] | null {
+  try {
+    const file = getFullRateFile(id);
+    if (!file.exists) return null;
+    return decodeDecibelData(file.bytesSync());
+  } catch (error) {
+    return null;
+  }
 }
 
 // 获取录音列表（只返回元数据，不含分贝数据）
@@ -126,22 +152,6 @@ async function migrateToNewFormat(oldRecordings: Recording[]): Promise<void> {
   }
 }
 
-// 兼容旧 API：获取所有录音（含分贝数据）- 尽量避免使用
-export async function getRecordings(): Promise<Recording[]> {
-  const metas = await getRecordingsMeta();
-  const recordings: Recording[] = [];
-  
-  for (const meta of metas) {
-    const decibelData = await getDecibelData(meta.id);
-    recordings.push({
-      ...meta,
-      decibelData: decibelData || [],
-    });
-  }
-  
-  return recordings;
-}
-
 // 获取单个录音的分贝数据
 export async function getDecibelData(id: string): Promise<DecibelDataPoint[] | null> {
   try {
@@ -156,7 +166,7 @@ export async function getDecibelData(id: string): Promise<DecibelDataPoint[] | n
 }
 
 // 保存录音（分离存储）
-export async function saveRecording(recording: Recording): Promise<void> {
+export async function saveRecording(recording: Recording, fullRateData?: DecibelDataPoint[]): Promise<void> {
   try {
     // 1. 保存分贝数据到单独的 key
     if (recording.decibelData && recording.decibelData.length > 0) {
@@ -165,7 +175,12 @@ export async function saveRecording(recording: Recording): Promise<void> {
         JSON.stringify(recording.decibelData)
       );
     }
-    
+
+    // 保存高频分贝数据到二进制文件
+    if (fullRateData && fullRateData.length > 0) {
+      saveFullRateData(recording.id, fullRateData);
+    }
+
     // 2. 保存元数据
     const metas = await getRecordingsMeta();
     const meta: RecordingMeta = {
@@ -179,9 +194,6 @@ export async function saveRecording(recording: Recording): Promise<void> {
     };
     metas.unshift(meta);
     await AsyncStorage.setItem(RECORDINGS_META_KEY, JSON.stringify(metas));
-    
-    // 清除临时录音数据
-    await AsyncStorage.removeItem(CURRENT_RECORDING_KEY);
   } catch (error) {
     throw error;
   }
@@ -203,6 +215,46 @@ export async function getRecording(id: string): Promise<Recording | null> {
     };
   } catch (error) {
     return null;
+  }
+}
+
+// 将旧录音（阈值分析或无分析）批量迁移为自动识别结果
+// 一次性、幂等：迁移完所有录音的 analysis.method 都是 'auto'，再次调用会立即返回。
+// 元数据只在最后统一写回一次（避免每条都全量重写），每处理一条通过 onProgress
+// 回调让 UI 渐进刷新，并让出事件循环保持列表滑动流畅。
+export async function migrateRecordingsToAuto(
+  onProgress?: (metas: RecordingMeta[]) => void
+): Promise<void> {
+  try {
+    const metas = await getRecordingsMeta();
+    const hasPending = metas.some((m) => m.analysis?.method !== 'auto');
+    if (!hasPending) return;
+
+    let changed = false;
+    for (let i = 0; i < metas.length; i++) {
+      const meta = metas[i];
+      if (meta.analysis?.method === 'auto') continue;
+
+      // 优先用高频数据（250ms）重算，没有时退回每秒聚合数据
+      const fullRate = loadFullRateData(meta.id);
+      const source = fullRate && fullRate.length > 0
+        ? fullRate
+        : await getDecibelData(meta.id);
+      if (!source || source.length === 0) continue;
+
+      // 替换成新对象（而非原地修改），保证列表按 item 引用比较时能刷新该行
+      metas[i] = { ...meta, analysis: analyzeSnoringAuto(source, meta.duration) };
+      changed = true;
+      onProgress?.([...metas]);
+
+      // 让出事件循环，避免连续 CPU 占用阻塞 UI
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+
+    if (changed) {
+      await AsyncStorage.setItem(RECORDINGS_META_KEY, JSON.stringify(metas));
+    }
+  } catch (error) {
   }
 }
 
@@ -282,7 +334,16 @@ export async function deleteRecording(id: string): Promise<void> {
       
       // 删除分贝数据
       await AsyncStorage.removeItem(getDecibelDataKey(id));
-      
+
+      // 删除高频分贝数据文件
+      try {
+        const fullRateFile = getFullRateFile(id);
+        if (fullRateFile.exists) {
+          fullRateFile.delete();
+        }
+      } catch (e) {
+      }
+
       // 从元数据列表中移除
       const filtered = metas.filter((r) => r.id !== id);
       await AsyncStorage.setItem(RECORDINGS_META_KEY, JSON.stringify(filtered));
@@ -290,137 +351,6 @@ export async function deleteRecording(id: string): Promise<void> {
   } catch (error) {
     throw error;
   }
-}
-
-// 临时保存录音中的分贝数据（防止应用被杀时数据丢失）
-export async function saveCurrentRecordingData(data: {
-  id: string;
-  startTime: number;
-  decibelData: DecibelDataPoint[];
-}): Promise<void> {
-  try {
-    await AsyncStorage.setItem(CURRENT_RECORDING_KEY, JSON.stringify(data));
-  } catch (error) {
-  }
-}
-
-export async function getCurrentRecordingData(): Promise<{
-  id: string;
-  startTime: number;
-  decibelData: DecibelDataPoint[];
-} | null> {
-  try {
-    const data = await AsyncStorage.getItem(CURRENT_RECORDING_KEY);
-    if (data) {
-      return JSON.parse(data);
-    }
-    return null;
-  } catch (error) {
-    return null;
-  }
-}
-
-export async function clearCurrentRecordingData(): Promise<void> {
-  try {
-    await AsyncStorage.removeItem(CURRENT_RECORDING_KEY);
-  } catch (error) {
-  }
-}
-
-// 分析分贝数据，识别打鼾事件
-export function analyzeDecibelData(decibelData: DecibelDataPoint[], threshold: number = SNORE_THRESHOLD_DB): SnoreAnalysis {
-  if (decibelData.length === 0) {
-    return {
-      hasSnoring: false,
-      snoreCount: 0,
-      snoreDuration: 0,
-      maxDecibel: 0,
-      avgDecibel: 0,
-      avgSnoringDecibel: 0,
-      severity: 'none',
-      analyzedAt: Date.now(),
-      snoreEvents: [],
-    };
-  }
-
-  // 计算基本统计数据
-  const decibels = decibelData.map(d => d.decibel);
-  const maxDecibel = Math.max(...decibels);
-  const avgDecibel = decibels.reduce((a, b) => a + b, 0) / decibels.length;
-
-  // 识别打鼾事件（使用传入的阈值）
-  const snoreEvents: SnoreEvent[] = [];
-  let currentEvent: { startTime: number; maxDecibel: number } | null = null;
-
-  for (const point of decibelData) {
-    const isAboveThreshold = point.decibel >= threshold;
-    if (isAboveThreshold) {
-      if (!currentEvent) {
-        currentEvent = { startTime: point.timestamp, maxDecibel: point.decibel };
-      } else {
-        currentEvent.maxDecibel = Math.max(currentEvent.maxDecibel, point.decibel);
-      }
-    } else {
-      if (currentEvent) {
-        const duration = point.timestamp - currentEvent.startTime;
-        if (duration >= MIN_SNORE_DURATION_MS) {
-          snoreEvents.push({
-            startTime: currentEvent.startTime,
-            endTime: point.timestamp,
-            maxDecibel: currentEvent.maxDecibel,
-          });
-        }
-        currentEvent = null;
-      }
-    }
-  }
-
-  // 处理最后一个事件
-  if (currentEvent && decibelData.length > 0) {
-    const lastPoint = decibelData[decibelData.length - 1];
-    const duration = lastPoint.timestamp - currentEvent.startTime;
-    if (duration >= MIN_SNORE_DURATION_MS) {
-      snoreEvents.push({
-        startTime: currentEvent.startTime,
-        endTime: lastPoint.timestamp,
-        maxDecibel: currentEvent.maxDecibel,
-      });
-    }
-  }
-
-  // 计算打鼾统计（使用传入的阈值）
-  const snoreDuration = snoreEvents.reduce((acc, event) => acc + (event.endTime - event.startTime), 0) / 1000;
-  const snoringPoints = decibelData.filter(d => d.decibel >= threshold);
-  const avgSnoringDecibel = snoringPoints.length > 0
-    ? snoringPoints.reduce((a, b) => a + b.decibel, 0) / snoringPoints.length
-    : 0;
-
-  // 判断严重程度
-  let severity: SnoreAnalysis['severity'] = 'none';
-  if (snoreEvents.length > 0) {
-    const totalDurationMin = (decibelData[decibelData.length - 1]?.timestamp || 0) / 60000;
-    const snorePercentage = totalDurationMin > 0 ? (snoreDuration / 60) / totalDurationMin * 100 : 0;
-    
-    if (snorePercentage > 30 || snoreEvents.length > 50) {
-      severity = 'severe';
-    } else if (snorePercentage > 15 || snoreEvents.length > 25) {
-      severity = 'moderate';
-    } else {
-      severity = 'mild';
-    }
-  }
-
-  return {
-    hasSnoring: snoreEvents.length > 0,
-    snoreCount: snoreEvents.length,
-    snoreDuration: Math.round(snoreDuration),
-    maxDecibel: Math.round(maxDecibel),
-    avgDecibel: Math.round(avgDecibel),
-    avgSnoringDecibel: Math.round(avgSnoringDecibel),
-    severity,
-    analyzedAt: Date.now(),
-    snoreEvents,
-  };
 }
 
 export function formatDuration(ms: number): string {
@@ -443,7 +373,7 @@ export function formatDate(timestamp: number): string {
   yesterday.setDate(yesterday.getDate() - 1);
   const isYesterday = date.toDateString() === yesterday.toDateString();
   
-  const locale = i18n.locale === 'zh' ? 'zh-CN' : 'en-US';
+  const locale = getDateLocale();
   const todayLabel = i18n.t('common.today');
   const yesterdayLabel = i18n.t('common.yesterday');
   
@@ -468,30 +398,6 @@ export function formatDate(timestamp: number): string {
 
 export function generateId(): string {
   return Date.now().toString(36) + Math.random().toString(36).substr(2);
-}
-
-// 保存打鼾阈值设置
-export async function saveSnoreThreshold(threshold: number): Promise<void> {
-  try {
-    await AsyncStorage.setItem(SNORE_THRESHOLD_KEY, threshold.toString());
-  } catch (error) {
-  }
-}
-
-// 获取打鼾阈值设置
-export async function getSnoreThreshold(): Promise<number> {
-  try {
-    const value = await AsyncStorage.getItem(SNORE_THRESHOLD_KEY);
-    if (value !== null) {
-      const threshold = parseInt(value, 10);
-      if (!isNaN(threshold)) {
-        return threshold;
-      }
-    }
-    return SNORE_THRESHOLD_DB; // 返回默认值
-  } catch (error) {
-    return SNORE_THRESHOLD_DB;
-  }
 }
 
 // 提醒设置存储键
