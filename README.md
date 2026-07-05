@@ -32,8 +32,8 @@ You can start developing by editing the files inside the **app** directory. This
 
 ## Release app
 
-1. eas build --platform ios
-2. eas submit --platform ios
+1. `eas build --platform ios` — build a release binary on EAS
+2. `eas submit --platform ios` — upload the build to App Store Connect
 3. try with testflight and then release to app store
 
 ref: 
