@@ -76,6 +76,10 @@
   "settings": {
     "title": "设置",
     "language": "语言",
+    "appearance": "外观",
+    "theme_system": "跟随系统",
+    "theme_light": "浅色",
+    "theme_dark": "深色",
     "languageChanged": "语言已切换",
     "reminder": "每日提醒",
     "reminderDescription": "每天定时提醒您使用呼噜娃录音",

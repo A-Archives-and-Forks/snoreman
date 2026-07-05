@@ -7,6 +7,7 @@ import * as Notifications from 'expo-notifications';
 import 'react-native-reanimated';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { ThemePreferenceProvider } from '@/hooks/theme-preference';
 import { Colors } from '@/constants/theme';
 import i18n, { initLanguage } from '@/i18n';
 
@@ -55,7 +56,6 @@ export const unstable_settings = {
 };
 
 export default function RootLayout() {
-  const colorScheme = useColorScheme();
   const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
@@ -70,18 +70,29 @@ export default function RootLayout() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <ThemeProvider value={colorScheme === 'dark' ? NavDarkTheme : NavLightTheme}>
-        <Stack>
-          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-          <Stack.Screen 
-            name="recording/[id]" 
-            options={{ 
-              headerBackTitle: i18n.t('recording.back'),
-            }} 
-          />
-        </Stack>
-        <StatusBar style="auto" />
-      </ThemeProvider>
+      <ThemePreferenceProvider>
+        <ThemedNavigation />
+      </ThemePreferenceProvider>
     </GestureHandlerRootView>
+  );
+}
+
+// 放在 ThemePreferenceProvider 内部，才能读到考虑了用户偏好的配色方案
+function ThemedNavigation() {
+  const colorScheme = useColorScheme();
+
+  return (
+    <ThemeProvider value={colorScheme === 'dark' ? NavDarkTheme : NavLightTheme}>
+      <Stack>
+        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        <Stack.Screen
+          name="recording/[id]"
+          options={{
+            headerBackTitle: i18n.t('recording.back'),
+          }}
+        />
+      </Stack>
+      <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
+    </ThemeProvider>
   );
 }

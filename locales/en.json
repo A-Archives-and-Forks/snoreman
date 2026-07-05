@@ -76,6 +76,10 @@
   "settings": {
     "title": "Settings",
     "language": "Language",
+    "appearance": "Appearance",
+    "theme_system": "System",
+    "theme_light": "Light",
+    "theme_dark": "Dark",
     "languageChanged": "Language switched",
     "reminder": "Daily Reminder",
     "reminderDescription": "Remind you to use Snoreman daily",

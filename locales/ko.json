@@ -76,6 +76,10 @@
   "settings": {
     "title": "설정",
     "language": "언어",
+    "appearance": "화면 모드",
+    "theme_system": "시스템 설정",
+    "theme_light": "라이트",
+    "theme_dark": "다크",
     "languageChanged": "언어가 변경되었습니다",
     "reminder": "매일 알림",
     "reminderDescription": "매일 Snoreman 사용을 알려드립니다",

@@ -17,6 +17,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '@/hooks/use-theme';
+import { useThemePreference, ThemeMode } from '@/hooks/theme-preference';
 import { Spacing, Radius, FontSize } from '@/constants/theme';
 import i18n, { setLanguage, getCurrentLanguage, SUPPORTED_LANGUAGES, LanguageCode } from '@/i18n';
 import {
@@ -29,10 +30,18 @@ import {
 export default function SettingsScreen() {
   const router = useRouter();
   const { colors, isDark, shadow } = useTheme();
+  const { mode: themeMode, setMode: setThemeMode } = useThemePreference();
   const insets = useSafeAreaInsets();
 
   const [currentLanguage, setCurrentLanguage] = useState(getCurrentLanguage());
   const [isLanguageExpanded, setIsLanguageExpanded] = useState(false);
+
+  // 外观选项（跟随系统 / 浅色 / 深色）
+  const THEME_OPTIONS: { mode: ThemeMode; icon: 'phone-portrait-outline' | 'sunny-outline' | 'moon-outline' }[] = [
+    { mode: 'system', icon: 'phone-portrait-outline' },
+    { mode: 'light', icon: 'sunny-outline' },
+    { mode: 'dark', icon: 'moon-outline' },
+  ];
 
   // 提醒设置状态
   const [reminderEnabled, setReminderEnabled] = useState(false);
@@ -261,6 +270,48 @@ export default function SettingsScreen() {
           </View>
         )}
 
+        {/* 外观设置 */}
+        <View style={[styles.settingItem, { backgroundColor: colors.surface, borderColor: colors.border }, shadow]}>
+          <View style={styles.settingLeft}>
+            <View style={[styles.settingIconWrap, { backgroundColor: colors.brandSoft }]}>
+              <Ionicons name="contrast-outline" size={20} color={colors.brand} />
+            </View>
+            <ThemedText style={styles.settingLabel}>
+              {i18n.t('settings.appearance')}
+            </ThemedText>
+          </View>
+        </View>
+        <View style={styles.themeOptions}>
+          {THEME_OPTIONS.map(({ mode, icon }) => {
+            const active = themeMode === mode;
+            return (
+              <TouchableOpacity
+                key={mode}
+                style={[
+                  styles.themeOption,
+                  {
+                    backgroundColor: active ? colors.brandSoft : colors.surface,
+                    borderColor: active ? colors.brand : colors.border,
+                  },
+                ]}
+                onPress={() => setThemeMode(mode)}
+                activeOpacity={0.7}
+              >
+                <Ionicons name={icon} size={20} color={active ? colors.brand : colors.textMuted} />
+                <ThemedText
+                  style={[
+                    styles.themeOptionText,
+                    { color: active ? colors.brand : colors.textMuted },
+                    active && { fontWeight: '600' },
+                  ]}
+                >
+                  {i18n.t(`settings.theme_${mode}`)}
+                </ThemedText>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
         {/* 每日提醒设置 */}
         <View style={styles.reminderSection}>
           <View
@@ -394,6 +445,23 @@ const styles = StyleSheet.create({
   },
   languageText: {
     fontSize: FontSize.md,
+  },
+  themeOptions: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+    paddingHorizontal: Spacing.xs,
+    marginBottom: Spacing.md,
+  },
+  themeOption: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: Spacing.md,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+  },
+  themeOptionText: {
+    fontSize: FontSize.sm,
   },
   reminderSection: {
     marginTop: Spacing.xs,
