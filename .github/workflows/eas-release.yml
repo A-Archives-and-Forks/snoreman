@@ -1,45 +1,89 @@
-# 发布流水线：触发 EAS 云端构建并自动提交 App Store Connect
+# 发布流水线：改 app.json 的 version 并 push 即自动打 tag + EAS 云端构建 + 提交 App Store Connect
 #
 # 触发方式：
-#   1. 推送 v 开头的 tag（如 git tag v1.1.4 && git push origin v1.1.4）
-#   2. GitHub 仓库页 Actions 标签里手动 Run workflow
+#   1. 改 app.json 里的 version（如 1.1.5 → 1.1.6）并 push（自动检测版本变化）
+#   2. 仓库 Actions 页手动 Run workflow（无论版本是否变化都会构建）
+#
+# 安全说明：--auto-submit 只上传到 App Store Connect（随后进 TestFlight），
+# 不会自动提交 App Store 审核、也不会公开发布——公开发版仍需在 ASC 手动操作。
 #
 # 前置条件（一次性）：
-#   - GitHub 仓库 Secrets 里配置 EXPO_TOKEN（expo.dev → Access tokens）
+#   - 仓库 Secrets 配置 EXPO_TOKEN（expo.dev → Access tokens）
 #   - EAS 凭据里已存 App Store Connect API Key（供非交互式 submit 使用）
-#
-# 说明：构建发生在 EAS 云端（和本地跑 eas build 一样），--no-wait 让
-# 本 job 触发后立即结束，构建/提交进度在 expo.dev 的 Builds 页面查看。
 
 name: EAS Release (iOS)
 
 on:
   workflow_dispatch:
   push:
-    tags:
-      - 'v*'
+    branches:
+      - new
+    paths:
+      - app.json
+
+# 允许用默认 token 推送 tag
+permissions:
+  contents: write
 
 jobs:
-  build-and-submit:
+  release:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # 需要完整 tag 列表来判断版本是否已发布
+
+      - name: Read version from app.json
+        id: ver
+        run: echo "version=$(node -p "require('./app.json').expo.version")" >> "$GITHUB_OUTPUT"
+
+      - name: Check if this version is already tagged
+        id: check
+        run: |
+          if git rev-parse "v${{ steps.ver.outputs.version }}" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # 是否执行发布：版本号是新的，或手动触发
+      - name: Decide whether to release
+        id: gate
+        run: |
+          if [ "${{ steps.check.outputs.exists }}" = "false" ] || [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "go=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "go=false (version v${{ steps.ver.outputs.version }} already released, skipping)"
+            echo "go=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Tag the release
+        if: steps.gate.outputs.go == 'true' && steps.check.outputs.exists == 'false'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag "v${{ steps.ver.outputs.version }}"
+          git push origin "v${{ steps.ver.outputs.version }}"
 
       - name: Setup Node
+        if: steps.gate.outputs.go == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
 
       - name: Setup EAS CLI
+        if: steps.gate.outputs.go == 'true'
         uses: expo/expo-github-action@v8
         with:
           eas-version: latest
           token: ${{ secrets.EXPO_TOKEN }}
 
       - name: Install dependencies
+        if: steps.gate.outputs.go == 'true'
         run: npm ci
 
       - name: Build and auto-submit to App Store
+        if: steps.gate.outputs.go == 'true'
         run: eas build --platform ios --profile production --non-interactive --no-wait --auto-submit
