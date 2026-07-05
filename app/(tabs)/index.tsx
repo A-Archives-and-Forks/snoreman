@@ -321,6 +321,7 @@ export default function HomeScreen() {
         data={recordings}
         renderItem={renderRecordingItem}
         keyExtractor={(item) => item.id}
+        style={isRecording && styles.listDimmed}
         contentContainerStyle={styles.listContent}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
@@ -476,6 +477,10 @@ const styles = StyleSheet.create({
   listContent: {
     paddingHorizontal: Spacing.xl,
     paddingBottom: 200,
+  },
+  // 录音时压暗下方列表/空状态，让注意力集中在录音卡和停止按钮
+  listDimmed: {
+    opacity: 0.4,
   },
   recordingItem: {
     flexDirection: 'row',
