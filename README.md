@@ -32,6 +32,27 @@ You can start developing by editing the files inside the **app** directory. This
 
 ## Release app
 
+Via GitHub Actions (recommended):
+
+1. Bump `version` in `app.json` and commit (build number auto-increments on EAS)
+2. Tag and push — this triggers [`eas-release.yml`](.github/workflows/eas-release.yml), which builds on EAS and auto-submits to App Store Connect:
+
+   ```bash
+   git tag v1.x.x
+   git push && git push --tags
+   ```
+
+   (or trigger manually: repo → Actions → "EAS Release (iOS)" → Run workflow)
+
+3. Watch build/submit progress on [expo.dev](https://expo.dev) → Builds
+4. Test with TestFlight, then release to App Store
+
+One-time setup for CI:
+- GitHub repo secret `EXPO_TOKEN` (expo.dev → Account settings → Access tokens)
+- App Store Connect API Key stored in EAS credentials (`eas credentials --platform ios`)
+
+Or manually from local:
+
 1. `eas build --platform ios` — build a release binary on EAS
 2. `eas submit --platform ios` — upload the build to App Store Connect
 3. try with testflight and then release to app store
