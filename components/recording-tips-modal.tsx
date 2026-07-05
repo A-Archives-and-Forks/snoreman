@@ -9,7 +9,8 @@ import {
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Ionicons } from '@expo/vector-icons';
-import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useTheme } from '@/hooks/use-theme';
+import { Palette, Spacing, Radius, FontSize } from '@/constants/theme';
 import i18n from '@/i18n';
 
 interface RecordingTipsModalProps {
@@ -18,9 +19,14 @@ interface RecordingTipsModalProps {
   onStartRecording: () => void;
 }
 
+const TIPS = [
+  { icon: 'battery-charging' as const, key: 'home.tipCharging' },
+  { icon: 'bed' as const, key: 'home.tipPosition' },
+  { icon: 'moon' as const, key: 'home.tipScreenOff' },
+];
+
 export function RecordingTipsModal({ visible, onClose, onStartRecording }: RecordingTipsModalProps) {
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === 'dark';
+  const { colors } = useTheme();
 
   const handleStart = () => {
     onClose();
@@ -35,10 +41,13 @@ export function RecordingTipsModal({ visible, onClose, onStartRecording }: Recor
       onRequestClose={onClose}
     >
       <View style={styles.overlay}>
-        <ThemedView style={[styles.container, { backgroundColor: isDark ? '#1E1E1E' : '#FFFFFF' }]}>
+        <ThemedView style={[styles.container, { backgroundColor: colors.surface }]}>
           {/* 关闭按钮 */}
-          <TouchableOpacity style={styles.closeButton} onPress={onClose}>
-            <Ionicons name="close" size={24} color={isDark ? '#fff' : '#333'} />
+          <TouchableOpacity
+            style={[styles.closeButton, { backgroundColor: colors.surfaceSunken }]}
+            onPress={onClose}
+          >
+            <Ionicons name="close" size={20} color={colors.textMuted} />
           </TouchableOpacity>
 
           {/* 标题 */}
@@ -53,28 +62,19 @@ export function RecordingTipsModal({ visible, onClose, onStartRecording }: Recor
 
           {/* 使用建议 */}
           <View style={styles.tipsContainer}>
-            <View style={styles.tipItem}>
-              <View style={[styles.tipIcon, { backgroundColor: '#6C63FF' }]}>
-                <Ionicons name="battery-charging" size={20} color="#FFFFFF" />
+            {TIPS.map((tip) => (
+              <View key={tip.icon} style={styles.tipItem}>
+                <View style={[styles.tipIcon, { backgroundColor: colors.brandSoft }]}>
+                  <Ionicons name={tip.icon} size={18} color={colors.brand} />
+                </View>
+                <ThemedText style={styles.tipText}>{i18n.t(tip.key)}</ThemedText>
               </View>
-              <ThemedText style={styles.tipText}>{i18n.t('home.tipCharging')}</ThemedText>
-            </View>
-            <View style={styles.tipItem}>
-              <View style={[styles.tipIcon, { backgroundColor: '#6C63FF' }]}>
-                <Ionicons name="bed" size={20} color="#FFFFFF" />
-              </View>
-              <ThemedText style={styles.tipText}>{i18n.t('home.tipPosition')}</ThemedText>
-            </View>
-            <View style={styles.tipItem}>
-              <View style={[styles.tipIcon, { backgroundColor: '#6C63FF' }]}>
-                <Ionicons name="moon" size={20} color="#FFFFFF" />
-              </View>
-              <ThemedText style={styles.tipText}>{i18n.t('home.tipScreenOff')}</ThemedText>
-            </View>
+            ))}
           </View>
 
           {/* 开始录音按钮 */}
-          <TouchableOpacity style={styles.startButton} onPress={handleStart}>
+          <TouchableOpacity style={styles.startButton} onPress={handleStart} activeOpacity={0.85}>
+            <Ionicons name="mic" size={18} color="#FFFFFF" />
             <ThemedText style={styles.startButtonText}>{i18n.t('home.startRecording')}</ThemedText>
           </TouchableOpacity>
         </ThemedView>
@@ -89,66 +89,74 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
+    padding: Spacing.xl,
   },
   container: {
     width: '100%',
     maxWidth: 400,
-    maxHeight: 550,
-    borderRadius: 20,
-    padding: 24,
+    maxHeight: 560,
+    borderRadius: Radius.xl,
+    padding: Spacing.xl,
     alignItems: 'center',
   },
   closeButton: {
     position: 'absolute',
-    top: 16,
-    right: 16,
-    padding: 4,
+    top: Spacing.lg,
+    right: Spacing.lg,
+    width: 32,
+    height: 32,
+    borderRadius: Radius.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 1,
   },
   title: {
-    fontSize: 20,
+    fontSize: FontSize.xl,
     fontWeight: '700',
-    marginBottom: 20,
-    marginTop: 8,
+    marginBottom: Spacing.xl,
+    marginTop: Spacing.xs,
   },
   image: {
     width: '100%',
     aspectRatio: 1.4,
     maxHeight: 200,
-    marginBottom: 24,
+    marginBottom: Spacing.xl,
   },
   tipsContainer: {
     width: '100%',
-    gap: 16,
-    marginBottom: 24,
+    gap: Spacing.lg,
+    marginBottom: Spacing.xl,
   },
   tipItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: Spacing.md,
   },
   tipIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 38,
+    height: 38,
+    borderRadius: Radius.sm,
     justifyContent: 'center',
     alignItems: 'center',
   },
   tipText: {
-    fontSize: 15,
+    fontSize: FontSize.md,
     flex: 1,
   },
   startButton: {
-    backgroundColor: '#6C63FF',
-    paddingVertical: 14,
-    paddingHorizontal: 32,
-    borderRadius: 12,
+    flexDirection: 'row',
+    gap: Spacing.sm,
+    backgroundColor: Palette.brand,
+    paddingVertical: Spacing.lg,
+    paddingHorizontal: Spacing.xxl,
+    borderRadius: Radius.md,
     width: '100%',
     alignItems: 'center',
+    justifyContent: 'center',
   },
   startButtonText: {
     color: '#FFFFFF',
-    fontSize: 16,
+    fontSize: FontSize.md,
     fontWeight: '600',
   },
 });

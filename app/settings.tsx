@@ -16,9 +16,9 @@ import * as Notifications from 'expo-notifications';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Ionicons } from '@expo/vector-icons';
-import { useColorScheme } from '@/hooks/use-color-scheme';
-import { Colors } from '@/constants/theme';
-import i18n, { setLanguage, getCurrentLanguage } from '@/i18n';
+import { useTheme } from '@/hooks/use-theme';
+import { Spacing, Radius, FontSize } from '@/constants/theme';
+import i18n, { setLanguage, getCurrentLanguage, SUPPORTED_LANGUAGES, LanguageCode } from '@/i18n';
 import {
   getReminderSettings,
   saveReminderSettings,
@@ -28,10 +28,8 @@ import {
 
 export default function SettingsScreen() {
   const router = useRouter();
-  const colorScheme = useColorScheme();
-  const colors = Colors[colorScheme ?? 'light'];
+  const { colors, isDark, shadow } = useTheme();
   const insets = useSafeAreaInsets();
-  const isDark = colorScheme === 'dark';
 
   const [currentLanguage, setCurrentLanguage] = useState(getCurrentLanguage());
   const [isLanguageExpanded, setIsLanguageExpanded] = useState(false);
@@ -167,25 +165,23 @@ export default function SettingsScreen() {
     setIsLanguageExpanded(prev => !prev);
   }, []);
 
-  const handleLanguageChange = useCallback(async (language: 'en' | 'zh') => {
+  const handleLanguageChange = useCallback(async (language: LanguageCode) => {
     if (language === currentLanguage) return;
-    
+
     await setLanguage(language);
     setCurrentLanguage(language);
-    
-    // 显示切换成功提示
+
+    // 切换后 i18n 已是新语言，提示以新语言展示
     Alert.alert(
       i18n.t('settings.language'),
-      language === 'zh' ? '语言已切换为中文' : 'Language switched to English',
+      i18n.t('settings.languageChanged'),
       [{ text: 'OK', onPress: () => router.back() }]
     );
   }, [currentLanguage, router]);
 
-  // 获取当前语言的显示文本
+  // 获取当前语言的原生名称
   const getCurrentLanguageText = () => {
-    return currentLanguage === 'zh' 
-      ? i18n.t('settings.chinese') 
-      : i18n.t('settings.english');
+    return SUPPORTED_LANGUAGES.find((l) => l.code === currentLanguage)?.nativeName ?? 'English';
   };
 
   return (
@@ -202,30 +198,32 @@ export default function SettingsScreen() {
         <TouchableOpacity
           style={[
             styles.settingItem,
-            { backgroundColor: isDark ? '#1E1E1E' : '#F8F9FA' },
+            { backgroundColor: colors.surface, borderColor: colors.border },
+            shadow,
           ]}
           onPress={toggleLanguageExpand}
           activeOpacity={0.7}
         >
           <View style={styles.settingLeft}>
-            <Ionicons 
-              name="language-outline" 
-              size={24} 
-              color={colors.tint} 
-              style={styles.settingIcon}
-            />
+            <View style={[styles.settingIconWrap, { backgroundColor: colors.brandSoft }]}>
+              <Ionicons
+                name="language-outline"
+                size={20}
+                color={colors.brand}
+              />
+            </View>
             <ThemedText style={styles.settingLabel}>
               {i18n.t('settings.language')}
             </ThemedText>
           </View>
           <View style={styles.settingRight}>
-            <ThemedText style={styles.settingValue}>
+            <ThemedText style={[styles.settingValue, { color: colors.textMuted }]}>
               {getCurrentLanguageText()}
             </ThemedText>
-            <Ionicons 
-              name={isLanguageExpanded ? "chevron-up" : "chevron-down"} 
-              size={20} 
-              color={isDark ? '#888' : '#666'} 
+            <Ionicons
+              name={isLanguageExpanded ? "chevron-up" : "chevron-down"}
+              size={18}
+              color={colors.textFaint}
             />
           </View>
         </TouchableOpacity>
@@ -233,75 +231,58 @@ export default function SettingsScreen() {
         {/* 语言选项 - 展开时显示 */}
         {isLanguageExpanded && (
           <View style={styles.languageOptions}>
-            <TouchableOpacity
-              style={[
-                styles.languageOption,
-                {
-                  backgroundColor: isDark ? '#2A2A2A' : '#FFFFFF',
-                  borderColor: currentLanguage === 'en' ? colors.tint : isDark ? '#3A3A3A' : '#E0E0E0',
-                  borderWidth: currentLanguage === 'en' ? 2 : 1,
-                },
-              ]}
-              onPress={() => handleLanguageChange('en')}
-              activeOpacity={0.7}
-            >
-              <ThemedText style={[
-                styles.languageText,
-                currentLanguage === 'en' && styles.languageTextActive,
-              ]}>
-                {i18n.t('settings.english')}
-              </ThemedText>
-              {currentLanguage === 'en' && (
-                <Ionicons name="checkmark" size={20} color={colors.tint} />
-              )}
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[
-                styles.languageOption,
-                {
-                  backgroundColor: isDark ? '#2A2A2A' : '#FFFFFF',
-                  borderColor: currentLanguage === 'zh' ? colors.tint : isDark ? '#3A3A3A' : '#E0E0E0',
-                  borderWidth: currentLanguage === 'zh' ? 2 : 1,
-                },
-              ]}
-              onPress={() => handleLanguageChange('zh')}
-              activeOpacity={0.7}
-            >
-              <ThemedText style={[
-                styles.languageText,
-                currentLanguage === 'zh' && styles.languageTextActive,
-              ]}>
-                {i18n.t('settings.chinese')}
-              </ThemedText>
-              {currentLanguage === 'zh' && (
-                <Ionicons name="checkmark" size={20} color={colors.tint} />
-              )}
-            </TouchableOpacity>
+            {SUPPORTED_LANGUAGES.map(({ code, nativeName }) => {
+              const active = currentLanguage === code;
+              return (
+                <TouchableOpacity
+                  key={code}
+                  style={[
+                    styles.languageOption,
+                    {
+                      backgroundColor: active ? colors.brandSoft : colors.surface,
+                      borderColor: active ? colors.brand : colors.border,
+                    },
+                  ]}
+                  onPress={() => handleLanguageChange(code)}
+                  activeOpacity={0.7}
+                >
+                  <ThemedText style={[
+                    styles.languageText,
+                    active && { fontWeight: '600', color: colors.brand },
+                  ]}>
+                    {nativeName}
+                  </ThemedText>
+                  {active && (
+                    <Ionicons name="checkmark-circle" size={20} color={colors.brand} />
+                  )}
+                </TouchableOpacity>
+              );
+            })}
           </View>
         )}
 
         {/* 每日提醒设置 */}
         <View style={styles.reminderSection}>
-          <TouchableOpacity
+          <View
             style={[
               styles.settingItem,
-              { backgroundColor: isDark ? '#1E1E1E' : '#F8F9FA' },
+              { backgroundColor: colors.surface, borderColor: colors.border },
+              shadow,
             ]}
-            activeOpacity={1}
           >
             <View style={styles.settingLeft}>
-              <Ionicons
-                name="notifications-outline"
-                size={24}
-                color={colors.tint}
-                style={styles.settingIcon}
-              />
-              <View>
+              <View style={[styles.settingIconWrap, { backgroundColor: colors.brandSoft }]}>
+                <Ionicons
+                  name="notifications-outline"
+                  size={20}
+                  color={colors.brand}
+                />
+              </View>
+              <View style={styles.reminderTextWrap}>
                 <ThemedText style={styles.settingLabel}>
                   {i18n.t('settings.reminder')}
                 </ThemedText>
-                <ThemedText style={styles.reminderDescription}>
+                <ThemedText style={[styles.reminderDescription, { color: colors.textFaint }]}>
                   {i18n.t('settings.reminderDescription')}
                 </ThemedText>
               </View>
@@ -309,33 +290,33 @@ export default function SettingsScreen() {
             <Switch
               value={reminderEnabled}
               onValueChange={handleReminderToggle}
-              trackColor={{ false: isDark ? '#3A3A3A' : '#D0D0D0', true: colors.tint }}
+              trackColor={{ false: isDark ? '#3A3A3A' : '#E0E0E5', true: colors.brand }}
               thumbColor="#FFFFFF"
             />
-          </TouchableOpacity>
+          </View>
 
           {/* 提醒时间设置 */}
           {reminderEnabled && (
             <TouchableOpacity
               style={[
                 styles.timePickerItem,
-                { backgroundColor: isDark ? '#2A2A2A' : '#FFFFFF' },
+                { backgroundColor: colors.surfaceSunken },
               ]}
               onPress={() => setShowTimePicker(true)}
               activeOpacity={0.7}
             >
               <View style={styles.timePickerContent}>
-                <ThemedText style={styles.timePickerLabel}>
+                <ThemedText style={[styles.timePickerLabel, { color: colors.textMuted }]}>
                   {i18n.t('settings.reminderTime')}
                 </ThemedText>
-                <ThemedText style={[styles.timePickerValue, { color: colors.tint }]}>
+                <ThemedText style={[styles.timePickerValue, { color: colors.brand }]}>
                   {formatTime(reminderTime.hour, reminderTime.minute)}
                 </ThemedText>
               </View>
               <Ionicons
                 name="time-outline"
                 size={20}
-                color={colors.tint}
+                color={colors.brand}
               />
             </TouchableOpacity>
           )}
@@ -368,75 +349,80 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 12,
+    padding: Spacing.lg,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    marginBottom: Spacing.md,
   },
   settingLeft: {
     flexDirection: 'row',
     alignItems: 'center',
+    flex: 1,
   },
-  settingIcon: {
-    marginRight: 12,
+  settingIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: Radius.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: Spacing.md,
   },
   settingLabel: {
-    fontSize: 16,
+    fontSize: FontSize.md,
     fontWeight: '600',
   },
   settingRight: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: Spacing.sm,
   },
   settingValue: {
-    fontSize: 14,
-    opacity: 0.6,
+    fontSize: FontSize.sm,
   },
   languageOptions: {
-    gap: 12,
-    paddingHorizontal: 8,
+    gap: Spacing.sm,
+    paddingHorizontal: Spacing.xs,
+    marginBottom: Spacing.md,
   },
   languageOption: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: 16,
-    borderRadius: 12,
+    padding: Spacing.lg,
+    borderRadius: Radius.md,
+    borderWidth: 1,
   },
   languageText: {
-    fontSize: 16,
-  },
-  languageTextActive: {
-    fontWeight: '600',
-    color: '#6C63FF',
+    fontSize: FontSize.md,
   },
   reminderSection: {
-    marginTop: 8,
+    marginTop: Spacing.xs,
+  },
+  reminderTextWrap: {
+    flex: 1,
   },
   reminderDescription: {
-    fontSize: 12,
-    opacity: 0.5,
+    fontSize: FontSize.xs,
     marginTop: 2,
   },
   timePickerItem: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: 16,
-    borderRadius: 12,
-    marginHorizontal: 8,
+    padding: Spacing.lg,
+    borderRadius: Radius.md,
+    marginHorizontal: Spacing.xs,
   },
   timePickerContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: Spacing.md,
   },
   timePickerLabel: {
-    fontSize: 14,
-    opacity: 0.8,
+    fontSize: FontSize.sm,
   },
   timePickerValue: {
-    fontSize: 16,
+    fontSize: FontSize.md,
     fontWeight: '600',
   },
 });

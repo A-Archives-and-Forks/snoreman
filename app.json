@@ -1,11 +1,17 @@
 {
   "expo": {
-    "name": "呼噜娃",
+    "name": "Snoreman",
     "slug": "snoreman",
-    "version": "1.0.2",
+    "version": "1.1.4",
     "orientation": "default",
     "icon": "./assets/images/icon.png",
     "scheme": "snoreman",
+    "locales": {
+      "zh-Hans": { "CFBundleDisplayName": "呼噜娃" },
+      "zh-Hant": { "CFBundleDisplayName": "呼噜娃" },
+      "ja": { "CFBundleDisplayName": "ぐうたん" },
+      "ko": { "CFBundleDisplayName": "쿨쿨박" }
+    },
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
@@ -50,7 +56,8 @@
           "microphonePermission": "需要使用麦克风来录制睡眠时的音频，以分析打鼾情况"
         }
       ],
-      "@react-native-community/datetimepicker"
+      "@react-native-community/datetimepicker",
+      "./plugins/with-android-localized-name"
     ],
     "experiments": {
       "typedRoutes": true,
