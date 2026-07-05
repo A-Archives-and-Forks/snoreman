@@ -224,7 +224,8 @@ export default function HomeScreen() {
         activeOpacity={0.7}
       >
         <View style={styles.recordingInfo}>
-          <ThemedText style={styles.recordingDate}>{formatDate(item.createdAt)}</ThemedText>
+          {/* createdAt 是停止录音的时刻，减去时长得到开始录制（入睡）的时间 */}
+          <ThemedText style={styles.recordingDate}>{formatDate(item.createdAt - item.duration)}</ThemedText>
           <ThemedText style={[styles.recordingDuration, { color: colors.textMuted }]}>
             {formatDuration(item.duration)}
           </ThemedText>
