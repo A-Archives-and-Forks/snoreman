@@ -1,0 +1,45 @@
+# 发布流水线：触发 EAS 云端构建并自动提交 App Store Connect
+#
+# 触发方式：
+#   1. 推送 v 开头的 tag（如 git tag v1.1.4 && git push origin v1.1.4）
+#   2. GitHub 仓库页 Actions 标签里手动 Run workflow
+#
+# 前置条件（一次性）：
+#   - GitHub 仓库 Secrets 里配置 EXPO_TOKEN（expo.dev → Access tokens）
+#   - EAS 凭据里已存 App Store Connect API Key（供非交互式 submit 使用）
+#
+# 说明：构建发生在 EAS 云端（和本地跑 eas build 一样），--no-wait 让
+# 本 job 触发后立即结束，构建/提交进度在 expo.dev 的 Builds 页面查看。
+
+name: EAS Release (iOS)
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-and-submit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Setup EAS CLI
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build and auto-submit to App Store
+        run: eas build --platform ios --profile production --non-interactive --no-wait --auto-submit
