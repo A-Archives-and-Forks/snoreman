@@ -168,6 +168,60 @@ function mergeCloseBursts(bursts: Burst[], options: SnoreDetectionOptions): Burs
   return merged.filter(b => b.endTime - b.startTime <= options.maxBurstMs);
 }
 
+// "双声折叠"参数：一次呼吸周期里吸气鼾（响）和呼气声（弱）都可能被检出，
+// 导致呼噜次数翻倍。满足以下任一信号时把相邻两声折叠为一次呼噜：
+const DUAL_PHASE_MAX_MEAN_INTERVAL_MS = 3000; // 间隔均值 <3s（呼吸 >20次/分，睡眠中不现实，必是半周期）
+const DUAL_PHASE_LOUDNESS_GAP_DB = 4;         // 奇偶位强弱交替 ≥4dB（吸气响、呼气弱）
+const DUAL_PHASE_PAIR_MAX_GAP_MS = 5000;      // 配对的两声起点间隔上限（须在同一呼吸周期内）
+
+// 检测并折叠"每个呼吸周期两声"的模式
+function collapseDualPhase(group: Burst[]): Burst[] {
+  if (group.length < 4) return group;
+
+  const intervals: number[] = [];
+  for (let i = 1; i < group.length; i++) {
+    intervals.push(group[i].startTime - group[i - 1].startTime);
+  }
+  const meanInterval = intervals.reduce((a, b) => a + b, 0) / intervals.length;
+
+  // 奇偶位的响度均值（强弱交替时两组差异明显；随机波动时趋近于零）
+  let evenSum = 0, evenCount = 0, oddSum = 0, oddCount = 0;
+  group.forEach((b, i) => {
+    if (i % 2 === 0) { evenSum += b.maxDecibel; evenCount++; }
+    else { oddSum += b.maxDecibel; oddCount++; }
+  });
+  const evenMean = evenSum / evenCount;
+  const oddMean = oddSum / oddCount;
+  const loudnessAlternates = Math.abs(evenMean - oddMean) >= DUAL_PHASE_LOUDNESS_GAP_DB;
+
+  if (meanInterval >= DUAL_PHASE_MAX_MEAN_INTERVAL_MS && !loudnessAlternates) {
+    return group;
+  }
+
+  // 相位对齐：强弱交替时以"响的那组"作为每对的主声开头
+  const start = loudnessAlternates && oddMean > evenMean ? 1 : 0;
+  const collapsed: Burst[] = [];
+  if (start === 1) collapsed.push(group[0]);
+  let i = start;
+  while (i < group.length) {
+    const cur = group[i];
+    const next = group[i + 1];
+    if (next && next.startTime - cur.startTime <= DUAL_PHASE_PAIR_MAX_GAP_MS) {
+      collapsed.push({
+        startTime: cur.startTime,
+        endTime: Math.max(cur.endTime, next.endTime),
+        maxDecibel: Math.max(cur.maxDecibel, next.maxDecibel),
+        peakProminence: Math.max(cur.peakProminence, next.peakProminence),
+      });
+      i += 2;
+    } else {
+      collapsed.push(cur);
+      i += 1;
+    }
+  }
+  return collapsed;
+}
+
 // 将突发按节律分组，判定打鼾段落
 function groupIntoEpisodes(
   bursts: Burst[],
@@ -176,7 +230,9 @@ function groupIntoEpisodes(
   const events: SnoreEvent[] = [];
   const episodes: SnoreEpisode[] = [];
 
-  const evaluateGroup = (group: Burst[]) => {
+  const evaluateGroup = (rawGroup: Burst[]) => {
+    // 先折叠"吸气鼾+呼气声"的双声模式，避免一次呼噜计两次
+    const group = collapseDualPhase(rawGroup);
     if (group.length < options.minBurstsPerEpisode) return;
 
     // 计算起点间隔的规律程度
