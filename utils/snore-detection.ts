@@ -16,7 +16,8 @@ import { DecibelDataPoint, SnoreAnalysis, SnoreEvent } from '@/utils/storage';
 // 孤立的响声（关门、咳嗽）和持续的噪音（电视、马路、流水）也会被过滤掉。
 
 // 检测算法版本：判定规则变化时 +1，已保存的分析结果会在后台按新版本重算
-export const DETECTION_ALGO_VERSION = 2;
+// v3: 相关性门槛加 durCv 前置条件，修复 4Hz 真呼噜被误杀成 0 的回归
+export const DETECTION_ALGO_VERSION = 3;
 
 export interface SnoreDetectionOptions {
   baselinePercentile: number; // 基线取分贝分布的低分位数
@@ -38,6 +39,8 @@ export interface SnoreDetectionOptions {
   maxDurationIntervalCorr: number; // 每声时长与到下一声间隔的相关系数上限。
                                    // 说话：说完长句才停顿，间隔=时长+停顿，强正相关；
                                    // 呼噜：时长恒定、间隔由呼吸决定，相关性≈0（双声打鼾为负）
+  minDurationCvForCorrelation: number; // 时长变异低于此值时不启用相关性门槛：
+                                       // 呼噜 durCv≈0.1，相关性是噪声；说话 durCv≈0.4，相关性真实
 }
 
 export const DEFAULT_DETECTION_OPTIONS: SnoreDetectionOptions = {
@@ -59,6 +62,7 @@ export const DEFAULT_DETECTION_OPTIONS: SnoreDetectionOptions = {
   maxDutyCycleDualPhase: 0.65,
   maxMedianPeakJumpDb: 5,
   maxDurationIntervalCorr: 0.5,
+  minDurationCvForCorrelation: 0.25,
 };
 
 // 一段连续的打鼾（由多次有节律的呼噜组成）
@@ -300,8 +304,14 @@ function groupIntoEpisodes(
     // 呼噜每声时长恒定、间隔由呼吸节律决定，两者无关。样本相关系数噪声随样本数减小
     // （σ≈1/√(n-1)），间隔少于 8 个时不判定，避免误伤真呼噜（小组另有更严的节律门槛）。
     // 用折叠前的原始突发计算，单边门槛（双声打鼾天然负相关，不受影响）。
-    // 仅对高频数据启用：旧版 1Hz 数据的时长测量只剩整秒档位，量化误差会造出虚假相关
-    if (rawGroup.length >= 9 && sampleIntervalMs <= 500) {
+    // 仅对高频数据启用：旧版 1Hz 数据的时长测量只剩整秒档位，量化误差会造出虚假相关。
+    //
+    // 关键前提 durCv > minDurationCvForCorrelation：呼噜每声长短几乎一致（durCv≈0.1），
+    // 4Hz 采样下阈值穿越的零星抖动仍会让相关系数偶尔冲到 0.5~0.7（落进说话区间），
+    // 一旦这样整段真呼噜会被误杀成 0——这正是"录完即时分析呼噜数为 0，重新分析又正常"
+    // 的根因。说话的相关性来自短语长短真实变化（durCv≈0.4+），所以只有时长确有变化时
+    // 才让这道门生效，用 durCv 把"真变化驱动的相关"和"噪声凑出的相关"分开。
+    if (rawGroup.length >= 9 && sampleIntervalMs <= 500 && durCv > options.minDurationCvForCorrelation) {
       const n = rawGroup.length - 1;
       const durs: number[] = [];
       const gaps: number[] = [];

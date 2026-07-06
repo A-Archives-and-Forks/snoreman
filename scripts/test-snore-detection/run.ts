@@ -40,6 +40,34 @@ function synthesize(totalMs: number, baseDb: number, sounds: Sound[], rng: () =>
 
 // —— 场景生成器 ——
 
+// 带升降包络的真实打鼾：每声用 sin 包络（安静→响→安静），并模拟采样时间戳抖动。
+// 这是最接近真机 4Hz 采集的形态——阈值穿越点数随峰值起伏，会让"时长-间隔相关性"
+// 偶尔冲高。用来守护回归：4Hz 真呼噜曾被相关性门槛误杀成 0（录完即时分析为 0）。
+function realisticSnoring(totalMs: number, count: number, cycleMs: number, rng: () => number): DecibelDataPoint[] {
+  const snores: { at: number; dur: number; peak: number }[] = [];
+  for (let i = 0; i < count; i++) {
+    snores.push({
+      at: 5000 + i * cycleMs + (rng() - 0.5) * 500,
+      dur: 1200 + (rng() - 0.5) * 300,
+      peak: 55 + (rng() - 0.5) * 5,
+    });
+  }
+  const points: DecibelDataPoint[] = [];
+  let t = 250 + rng() * 200; // 启动延迟
+  while (t < totalMs) {
+    let db = 30 + (rng() - 0.5) * 4;
+    for (const s of snores) {
+      if (t >= s.at && t < s.at + s.dur) {
+        const env = Math.sin(Math.PI * (t - s.at) / s.dur); // 升降包络
+        db = Math.max(db, 30 + (s.peak - 30) * env + (rng() - 0.5) * 3);
+      }
+    }
+    points.push({ timestamp: Math.round(t), decibel: Math.round(db) });
+    t += SAMPLE_MS + (rng() - 0.5) * 40; // 采样抖动 ±20ms
+  }
+  return points;
+}
+
 // 规律打鼾：周期 cycleMs，每声 durMs，峰值 db（带微小抖动）
 function snoring(startMs: number, count: number, cycleMs: number, durMs: number, db: number, rng: () => number): Sound[] {
   const sounds: Sound[] = [];
@@ -199,6 +227,9 @@ const sweeps: { name: string; make: (r: () => number) => DecibelDataPoint[]; exp
   { name: '双声打鼾 12 周期', make: (r) => synthesize(120000, 30, dualPhaseSnoring(10000, 12, 5000, r), r), expectSnore: true },
   { name: '周期漂移打鼾 30 声（4s→6s）', make: (r) => synthesize(180000, 30, driftingSnoring(10000, 30, r), r), expectSnore: true },
   { name: '旧版 1Hz 数据的打鼾 15 声', make: (r) => synthesize(120000, 30, snoring(10000, 15, 5000, 1200, 55, r), r, LEGACY_SAMPLE_MS), expectSnore: true },
+  // 回归守护：真实包络 4Hz 打鼾必须稳定检出（曾被时长-间隔相关性门槛误杀成 0）
+  { name: '真实包络 4Hz 打鼾 18 声', make: (r) => realisticSnoring(90000, 18, 4500, r), expectSnore: true },
+  { name: '真实包络 4Hz 打鼾 30 声', make: (r) => realisticSnoring(150000, 30, 4500, r), expectSnore: true },
 ];
 
 console.log(`\n—— 多种子扫描（${SEEDS} 个种子）——`);
