@@ -9,6 +9,7 @@ import 'react-native-reanimated';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { ThemePreferenceProvider } from '@/hooks/theme-preference';
 import { Colors } from '@/constants/theme';
+import { OrientationToggleButton } from '@/components/orientation-toggle-button';
 import i18n, { initLanguage } from '@/i18n';
 
 // 用应用色板定制导航主题：头部背景、文字、返回按钮 tint 都与设计系统统一
@@ -85,10 +86,14 @@ function ThemedNavigation() {
     <ThemeProvider value={colorScheme === 'dark' ? NavDarkTheme : NavLightTheme}>
       <Stack>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        {/* 头部在这里一次性配齐（含 headerRight）：页面挂载后再更新 options 会让
+            iOS 26 玻璃质感的返回/旋转按钮重建，深色模式下闪一次高光 */}
         <Stack.Screen
           name="recording/[id]"
           options={{
+            title: i18n.t('recording.title'),
             headerBackTitle: i18n.t('recording.back'),
+            headerRight: () => <OrientationToggleButton />,
           }}
         />
       </Stack>

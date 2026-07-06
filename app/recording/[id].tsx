@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 import { setAudioModeAsync } from 'expo-audio';
 import * as ScreenOrientation from 'expo-screen-orientation';
-import { useLocalSearchParams, Stack, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Sharing from 'expo-sharing';
 import { File, Paths } from 'expo-file-system';
@@ -18,7 +18,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { AudioPlayerChart, AudioPlayerChartHandle } from '@/components/audio-player-chart';
 import { useTheme } from '@/hooks/use-theme';
-import { Ionicons, MaterialIcons } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import { Palette, Spacing, Radius, FontSize } from '@/constants/theme';
 import i18n from '@/i18n';
 import {
@@ -192,35 +192,34 @@ export default function RecordingDetailScreen() {
     }
   };
 
-  // 切换屏幕方向
-  const toggleOrientation = async () => {
-    try {
-      // 获取当前方向
-      const orientation = await ScreenOrientation.getOrientationAsync();
-      const isCurrentlyLandscape = 
-        orientation === ScreenOrientation.Orientation.LANDSCAPE_LEFT ||
-        orientation === ScreenOrientation.Orientation.LANDSCAPE_RIGHT;
-      
-      if (isCurrentlyLandscape) {
-        // 当前是横屏，切换到竖屏
-        await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
-      } else {
-        // 当前是竖屏，切换到横屏
-        await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE);
-      }
-    } catch (error) {
-      Alert.alert(i18n.t('recording.toggleOrientation'), i18n.t('recording.orientationFailed'));
-    }
-  };
-
   // 把相邻的呼噜事件聚合成片段，供用户逐段播放查看
   const snoreSegments = useMemo(
     () => groupEventsIntoSegments(autoAnalysis?.snoreEvents ?? []),
     [autoAnalysis]
   );
 
-  // 点击片段：跳到片段开始前2秒播放，播放到片段结束后1秒自动停止
-  const handleSegmentPress = useCallback((segment: SnoreSegment) => {
+  // 正在播放的片段下标（该行显示暂停按钮）。播放位置每 tick 都会回调，
+  // 但只有下标变化时 setState 才触发重渲染
+  const [activeSegmentIndex, setActiveSegmentIndex] = useState<number | null>(null);
+  const handlePlaybackState = useCallback((playing: boolean, positionMs: number) => {
+    if (!playing) {
+      setActiveSegmentIndex(null);
+      return;
+    }
+    // 与点击片段的播放窗口一致：开始前 2 秒 ~ 结束后 1 秒
+    const index = snoreSegments.findIndex(
+      (s) => positionMs >= s.startTime - 2000 && positionMs < s.endTime + 1000
+    );
+    setActiveSegmentIndex(index >= 0 ? index : null);
+  }, [snoreSegments]);
+
+  // 点击片段：跳到片段开始前2秒播放，播放到片段结束后1秒自动停止；
+  // 点击正在播放的片段则暂停
+  const handleSegmentPress = useCallback((segment: SnoreSegment, isActive: boolean) => {
+    if (isActive) {
+      chartRef.current?.pause();
+      return;
+    }
     chartRef.current?.seekToAndPlay(
       Math.max(0, segment.startTime - 2000),
       segment.endTime + 1000
@@ -278,10 +277,10 @@ export default function RecordingDetailScreen() {
     );
   }, [recording, fullRateData]);
 
+  // 加载中不改导航栏标题：挂载后更新 options 会重建 iOS 26 的玻璃头部按钮（闪一下）
   if (!recording) {
     return (
       <ThemedView style={[styles.container, styles.centerContent]}>
-        <Stack.Screen options={{ title: i18n.t('recording.loading') }} />
         <ActivityIndicator size="large" color={colors.tint} />
       </ThemedView>
     );
@@ -299,27 +298,6 @@ export default function RecordingDetailScreen() {
 
   return (
     <ThemedView style={styles.container}>
-      <Stack.Screen
-        options={{
-          title: i18n.t('recording.title'),
-          headerBackTitle: i18n.t('recording.back'),
-          headerRight: () => (
-            <TouchableOpacity
-              onPress={toggleOrientation}
-              style={{ padding: 8 }}
-              activeOpacity={0.7}
-              accessibilityLabel={i18n.t('recording.toggleOrientation')}
-              accessibilityRole="button"
-            >
-              <MaterialIcons
-                name="screen-rotation"
-                size={22}
-                color={colors.text}
-              />
-            </TouchableOpacity>
-          ),
-        }}
-      />
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={[
@@ -450,6 +428,7 @@ export default function RecordingDetailScreen() {
               mode={analysisMode}
               snoreEvents={autoAnalysis?.snoreEvents}
               startTime={recording.createdAt - recording.duration}
+              onPlaybackState={handlePlaybackState}
               onThresholdChange={async (value) => {
                 setThreshold(value);
                 // 手动阈值只作为探索工具持久化阈值本身，不覆盖自动识别的分析结果
@@ -563,11 +542,15 @@ export default function RecordingDetailScreen() {
                       styles.segmentRow,
                       index < visibleSegments.length - 1 && [styles.segmentRowBorder, { borderBottomColor: colors.border }],
                     ]}
-                    onPress={() => handleSegmentPress(segment)}
+                    onPress={() => handleSegmentPress(segment, index === activeSegmentIndex)}
                     activeOpacity={0.7}
                   >
                     <View style={[styles.segmentPlayIcon, { backgroundColor: colors.brandSoft }]}>
-                      <Ionicons name="play" size={13} color={colors.brand} />
+                      <Ionicons
+                        name={index === activeSegmentIndex ? 'pause' : 'play'}
+                        size={13}
+                        color={colors.brand}
+                      />
                     </View>
                     <View style={styles.segmentInfo}>
                       <ThemedText style={styles.segmentTime}>

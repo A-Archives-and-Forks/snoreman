@@ -54,6 +54,8 @@ export interface AudioPlayerChartHandle {
   // 跳转到指定位置并开始播放（毫秒）
   // 传入 stopAtMs 时播放到该位置自动暂停（用户手动操作播放器会取消自动暂停）
   seekToAndPlay: (positionMs: number, stopAtMs?: number) => void;
+  // 暂停播放（供外部控件使用，如打鼾片段列表的暂停按钮）
+  pause: () => void;
 }
 
 interface AudioPlayerChartProps {
@@ -68,6 +70,8 @@ interface AudioPlayerChartProps {
   mode?: 'auto' | 'manual';
   snoreEvents?: SnoreEvent[]; // 自动识别的打鼾事件（auto 模式使用）
   startTime?: number; // 录音开始的时间戳（用于横轴显示当地时钟时间）
+  // 播放状态回调（是否在播放 + 当前位置毫秒），供父级高亮正在播放的打鼾片段
+  onPlaybackState?: (playing: boolean, positionMs: number) => void;
 }
 
 const DEFAULT_HEIGHT = 180;
@@ -103,6 +107,7 @@ export const AudioPlayerChart = forwardRef<AudioPlayerChartHandle, AudioPlayerCh
       mode = 'manual',
       snoreEvents = [],
       startTime,
+      onPlaybackState,
     },
     ref
   ) {
@@ -119,8 +124,10 @@ export const AudioPlayerChart = forwardRef<AudioPlayerChartHandle, AudioPlayerCh
   const [sliderValue, setSliderValue] = useState<number>(0);
   const [containerWidth, setContainerWidth] = useState<number>(300);
   const [localThreshold, setLocalThreshold] = useState<number>(threshold);
-  // 自动暂停位置（毫秒），null 表示不自动暂停
-  const stopAtRef = useRef<number | null>(null);
+  // 自动暂停点：seekTo 后 status.currentTime 是异步更新的，直接比较会拿到跳转前的
+  // 旧位置——点一个更早的片段时旧位置已超过新暂停点，会被立即误暂停。
+  // 所以暂停点需要"武装"：先观察到播放位置进入 [fromMs, stopAtMs) 窗口才生效
+  const stopAtRef = useRef<{ fromMs: number; stopAtMs: number; armed: boolean } | null>(null);
 
   // 录音保存的阈值是异步加载的，prop 变化时同步内部状态
   useEffect(() => {
@@ -269,11 +276,17 @@ export const AudioPlayerChart = forwardRef<AudioPlayerChartHandle, AudioPlayerCh
 
   // 播放到自动暂停位置时停下（如打鼾片段播放完毕）
   useEffect(() => {
-    if (
-      stopAtRef.current !== null &&
-      status?.playing &&
-      (status.currentTime || 0) * 1000 >= stopAtRef.current
-    ) {
+    const stop = stopAtRef.current;
+    if (!stop || !status?.playing) return;
+    const positionMs = (status.currentTime || 0) * 1000;
+    if (!stop.armed) {
+      // 等 seek 生效、播放位置进入片段窗口后再武装，避免用跳转前的旧位置误判
+      if (positionMs >= stop.fromMs && positionMs < stop.stopAtMs) {
+        stop.armed = true;
+      }
+      return;
+    }
+    if (positionMs >= stop.stopAtMs) {
       stopAtRef.current = null;
       try {
         player.pause();
@@ -281,6 +294,11 @@ export const AudioPlayerChart = forwardRef<AudioPlayerChartHandle, AudioPlayerCh
       }
     }
   }, [status?.currentTime, status?.playing, player]);
+
+  // 播放状态回调：父级用来高亮正在播放的打鼾片段
+  useEffect(() => {
+    onPlaybackState?.(!!status?.playing, (status?.currentTime || 0) * 1000);
+  }, [status?.playing, status?.currentTime, onPlaybackState]);
 
   // 点击图表处理：找到最近的红色波形条（识别为呼噜/超阈值）并跳转
   const handleChartPress = useCallback((event: GestureResponderEvent) => {
@@ -329,18 +347,26 @@ export const AudioPlayerChart = forwardRef<AudioPlayerChartHandle, AudioPlayerCh
   }, [player, status?.playing]);
 
   // 跳转到指定位置并播放（供外部通过 ref 调用，如打鼾片段列表）
+  // 无条件 play()：不管当前在播放还是暂停，点击片段总是播放那一段
   const seekToAndPlay = useCallback((positionMs: number, stopAtMs?: number) => {
     try {
-      stopAtRef.current = stopAtMs ?? null;
-      player.seekTo(Math.max(0, positionMs) / 1000);
-      if (!status?.playing) {
-        player.play();
-      }
+      const fromMs = Math.max(0, positionMs);
+      stopAtRef.current = stopAtMs !== undefined ? { fromMs, stopAtMs, armed: false } : null;
+      player.seekTo(fromMs / 1000);
+      player.play();
     } catch (e) {
     }
-  }, [player, status?.playing]);
+  }, [player]);
 
-  useImperativeHandle(ref, () => ({ seekToAndPlay }), [seekToAndPlay]);
+  const pause = useCallback(() => {
+    try {
+      stopAtRef.current = null;
+      player.pause();
+    } catch (e) {
+    }
+  }, [player]);
+
+  useImperativeHandle(ref, () => ({ seekToAndPlay, pause }), [seekToAndPlay, pause]);
 
   // 快退15秒
   const handleSkipBackward = useCallback(() => {
