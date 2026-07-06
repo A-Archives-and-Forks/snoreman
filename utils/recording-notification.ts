@@ -36,7 +36,6 @@ export async function showRecordingNotification(): Promise<void> {
       identifier: NOTIFICATION_ID,
       content: {
         title: i18n.t('recordingNotification.title'),
-        body: i18n.t('recordingNotification.body'),
         sound: false,
         sticky: true,        // Android: 常驻、不可划走
         autoDismiss: false,  // 点击后不自动消失（录音仍在进行）
