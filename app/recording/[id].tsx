@@ -345,13 +345,25 @@ export default function RecordingDetailScreen() {
             ]}
           >
             <View style={[styles.severityRow, { borderBottomColor: colors.border }]}>
-              <ThemedText style={[styles.severityLabel, { color: colors.textMuted }]}>{i18n.t('recording.severityLabel')}</ThemedText>
               <View style={[styles.severityBadge, { backgroundColor: getSeverityColor(autoAnalysis.severity, colors) + '1F' }]}>
                 <View style={[styles.severityBadgeDot, { backgroundColor: getSeverityColor(autoAnalysis.severity, colors) }]} />
                 <ThemedText style={[styles.severityBadgeText, { color: getSeverityColor(autoAnalysis.severity, colors) }]}>
                   {getSeverityText(autoAnalysis.severity)}
                 </ThemedText>
               </View>
+              <TouchableOpacity
+                style={styles.reanalyzeButton}
+                onPress={handleReanalyze}
+                activeOpacity={0.7}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                accessibilityLabel={i18n.t('recording.reanalyze')}
+                accessibilityRole="button"
+              >
+                <Ionicons name="refresh" size={14} color={colors.brand} />
+                <ThemedText style={[styles.reanalyzeText, { color: colors.brand }]}>
+                  {i18n.t('recording.reanalyze')}
+                </ThemedText>
+              </TouchableOpacity>
             </View>
             <View style={styles.statsRow}>
               <View style={styles.statItem}>
@@ -510,19 +522,6 @@ export default function RecordingDetailScreen() {
                 {i18n.t('recording.snoreSegments')}
                 {snoreSegments.length > 0 ? ` · ${snoreSegments.length}` : ''}
               </ThemedText>
-              <TouchableOpacity
-                style={styles.reanalyzeButton}
-                onPress={handleReanalyze}
-                activeOpacity={0.7}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                accessibilityLabel={i18n.t('recording.reanalyze')}
-                accessibilityRole="button"
-              >
-                <Ionicons name="refresh" size={14} color={colors.brand} />
-                <ThemedText style={[styles.reanalyzeText, { color: colors.brand }]}>
-                  {i18n.t('recording.reanalyze')}
-                </ThemedText>
-              </TouchableOpacity>
             </View>
 
             {snoreSegments.length === 0 ? (
@@ -704,9 +703,6 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.lg,
     paddingBottom: Spacing.lg,
     borderBottomWidth: 1,
-  },
-  severityLabel: {
-    fontSize: FontSize.sm,
   },
   severityBadge: {
     flexDirection: 'row',

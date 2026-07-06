@@ -45,7 +45,6 @@ export default function HomeScreen() {
     currentDecibel,
     decibelData,
     duration,
-    liveSnoreCount,
     isLikelySnoring,
     startRecording,
     stopRecording,
@@ -301,15 +300,6 @@ export default function HomeScreen() {
           {/* 实时波形图 */}
           <View style={styles.waveformContainer}>
             <LiveWaveform recentData={decibelData} height={50} threshold={SNORE_THRESHOLD_DB} />
-          </View>
-
-          {/* 实时自动识别结果 */}
-          <View style={[styles.liveDetectionContainer, { borderTopColor: colors.border }]}>
-            <View style={styles.liveDetectionRow}>
-              <ThemedText style={styles.liveDetectionLabel}>{i18n.t('home.autoDetectedCount')}</ThemedText>
-              <ThemedText style={[styles.liveDetectionValue, { color: colors.brand }]}>{liveSnoreCount}</ThemedText>
-            </View>
-            <ThemedText style={[styles.liveDetectionHint, { color: colors.textFaint }]}>{i18n.t('home.autoDetectHint')}</ThemedText>
           </View>
         </View>
       )}
@@ -590,27 +580,5 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: FontSize.sm,
     fontWeight: '600',
-  },
-  liveDetectionContainer: {
-    marginTop: Spacing.md,
-    paddingTop: Spacing.md,
-    borderTopWidth: 1,
-  },
-  liveDetectionRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  liveDetectionLabel: {
-    fontSize: FontSize.sm,
-    fontWeight: '600',
-  },
-  liveDetectionValue: {
-    fontSize: FontSize.lg,
-    fontWeight: '700',
-  },
-  liveDetectionHint: {
-    fontSize: FontSize.xs,
-    marginTop: Spacing.xs,
   },
 });
