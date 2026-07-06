@@ -16,7 +16,9 @@ import { DecibelDataPoint, SnoreAnalysis, SnoreEvent } from '@/utils/storage';
 // 孤立的响声（关门、咳嗽）和持续的噪音（电视、马路、流水）也会被过滤掉。
 
 // 检测算法版本：判定规则变化时 +1，已保存的分析结果会在后台按新版本重算
-export const DETECTION_ALGO_VERSION = 2;
+// v3：真机反馈 v2 过严（漏一口气会顶爆间隔变异、理想化阈值余量太紧），
+//     节律判定改为谐波归一（容忍漏气拍），并放宽时长/响度/单声上限
+export const DETECTION_ALGO_VERSION = 3;
 
 export interface SnoreDetectionOptions {
   baselinePercentile: number; // 基线取分贝分布的低分位数
@@ -27,9 +29,11 @@ export interface SnoreDetectionOptions {
   minIntervalMs: number;      // 呼噜之间的最小间隔（起点到起点）
   maxIntervalMs: number;      // 呼噜之间的最大间隔
   minBurstsPerEpisode: number; // 构成一段打鼾所需的最少呼噜次数
-  maxIntervalCv: number;      // 间隔的最大变异系数（标准差/均值），越小要求节律越规律
+  maxIntervalCv: number;      // 间隔相对基准周期的最大均方偏差（谐波归一后），越小要求节律越规律
   smallGroupSize: number;     // 少于这个数的组视为"小组"，节律要求更严（样本少碰巧规律的概率高）
-  maxIntervalCvSmall: number; // 小组的间隔变异系数上限（过滤对话里碰巧规律的几句话）
+  maxIntervalCvSmall: number; // 小组的节律偏差上限（过滤对话里碰巧规律的几句话）
+  minBaseIntervalFraction: number; // 间隔中必须有这个比例是基准周期本身（而非 2 倍），
+                                   // 防止说话的杂乱长停顿靠谐波归一蒙混过关
   maxDurationCv: number;      // 每声时长的变异系数上限（呼噜声声长短相近，说话短语忽长忽短）
   maxDutyCycle: number;       // 响声占时段的比例上限（呼噜短响长停，说话长响短停）
   maxDutyCycleDualPhase: number; // 双声打鼾（吸气+呼气）的占空比上限：两声/周期天然更高，
@@ -45,20 +49,22 @@ export const DEFAULT_DETECTION_OPTIONS: SnoreDetectionOptions = {
   prominenceDb: 8,
   minAbsoluteDb: 38,
   minBurstMs: 300,
-  // 3.5s：单声呼噜（吸气段）的生理上限再加余量；说话的长句、持续噪音在这里被排除，
-  // 而且长句造成的"空洞"会推高剩余突发的间隔变异，进一步帮助节律门槛拦截对话
-  maxBurstMs: 3500,
+  // 4.5s：单声呼噜（吸气段）的生理上限再加余量；更长的句子、持续噪音在这里被排除
+  maxBurstMs: 4500,
   minIntervalMs: 2000,
   maxIntervalMs: 10000,
   minBurstsPerEpisode: 4,
   maxIntervalCv: 0.25,
   smallGroupSize: 6,
   maxIntervalCvSmall: 0.2,
-  maxDurationCv: 0.6,
+  minBaseIntervalFraction: 0.7,
+  maxDurationCv: 0.8,
   maxDutyCycle: 0.5,
   maxDutyCycleDualPhase: 0.65,
-  maxMedianPeakJumpDb: 5,
-  maxDurationIntervalCorr: 0.5,
+  maxMedianPeakJumpDb: 6,
+  // 0.55：说话组的 r 集中在 0.57~0.75，真呼噜的采样噪声偶尔到 0.5 出头——
+  // 卡在两个分布之间，优先少误杀（漏报是真机反馈的主要痛点）
+  maxDurationIntervalCorr: 0.55,
 };
 
 // 一段连续的打鼾（由多次有节律的呼噜组成）
@@ -192,6 +198,18 @@ function mergeCloseBursts(bursts: Burst[], options: SnoreDetectionOptions): Burs
   return merged.filter(b => b.endTime - b.startTime <= options.maxBurstMs);
 }
 
+// 救回机制：形态不完美的段落若邻近严格达标的打鼾段，按打鼾计（见 groupIntoEpisodes）
+const RESCUE_WINDOW_MS = 3 * 60 * 1000; // 与严格达标段的最大距离
+// 宽松档在严格档各门槛基础上的放宽量
+const RESCUE_RELAX = {
+  intervalCv: 0.1,
+  baseIntervalFraction: 0.2,
+  durationCv: 0.3,
+  dutyCycle: 0.1,
+  medianPeakJumpDb: 2,
+  durationIntervalCorr: 0.2,
+};
+
 // "双声折叠"参数：一次呼吸周期里吸气鼾（响）和呼气声（弱）都可能被检出，
 // 导致呼噜次数翻倍。满足以下任一信号时把相邻两声折叠为一次呼噜：
 const DUAL_PHASE_MAX_MEAN_INTERVAL_MS = 3000; // 间隔均值 <3s（呼吸 >20次/分，睡眠中不现实，必是半周期）
@@ -255,32 +273,60 @@ function groupIntoEpisodes(
   const events: SnoreEvent[] = [];
   const episodes: SnoreEpisode[] = [];
 
+  // 通过宽松档但没过严格档的候选组：真实打鼾的形态经常不完美（翻身、体位变化、
+  // 呼吸不稳），单看一段可能不达标；只要它邻近一段严格达标的打鼾，就按打鼾救回。
+  // 睡前的说话/洗漱离真打鼾段落远，救不回去
+  interface Candidate {
+    group: Burst[];
+    cv: number;
+    strict: boolean;
+  }
+  const candidates: Candidate[] = [];
+
   const evaluateGroup = (rawGroup: Burst[]) => {
     // 先折叠"吸气鼾+呼气声"的双声模式，避免一次呼噜计两次
     const group = collapseDualPhase(rawGroup);
     if (group.length < options.minBurstsPerEpisode) return;
 
-    // 计算起点间隔的规律程度
-    // 小组（如刚够 4 声、只有 3 个间隔）碰巧规律的概率高——对话里几句话的
-    // 间隔常常就是 2~5 秒，所以声数不足时用更严的门槛
+    // 节律规律程度：谐波归一后的间隔偏差
+    // 真实打鼾常会"漏一口气"（某次呼吸没打出声），间隔表现为基准周期的约 2 倍；
+    // 直接算变异系数会被这种间隔顶爆、整段误杀（v2 真机反馈的主要漏报来源）。
+    // 以中位间隔为基准周期，把接近 2 倍的间隔归一回来再算偏差；
+    // 同时要求大多数间隔是基准本身——说话的杂乱停顿不满足这种谐波结构。
+    // 小组（如刚够 4 声、只有 3 个间隔）碰巧规律的概率高，用更严的门槛
     const intervals: number[] = [];
     for (let i = 1; i < group.length; i++) {
       intervals.push(group[i].startTime - group[i - 1].startTime);
     }
-    const mean = intervals.reduce((a, b) => a + b, 0) / intervals.length;
-    const variance = intervals.reduce((a, b) => a + (b - mean) ** 2, 0) / intervals.length;
-    const cv = mean > 0 ? Math.sqrt(variance) / mean : 1;
+    const sortedIntervals = [...intervals].sort((a, b) => a - b);
+    const baseInterval = sortedIntervals[Math.floor(sortedIntervals.length / 2)];
+    if (baseInterval <= 0) return;
+    let devSquaredSum = 0;
+    let baseCount = 0;
+    for (const interval of intervals) {
+      const multiple = Math.min(2, Math.max(1, Math.round(interval / baseInterval)));
+      if (multiple === 1) baseCount++;
+      const dev = (interval - multiple * baseInterval) / baseInterval;
+      devSquaredSum += dev * dev;
+    }
+    const cv = Math.sqrt(devSquaredSum / intervals.length);
     const cvLimit = group.length >= options.smallGroupSize
       ? options.maxIntervalCv
       : options.maxIntervalCvSmall;
-    if (cv > cvLimit) return;
+    let strict = true; // 各门槛：超宽松档直接丢弃，超严格档降为待救回
+    if (cv > cvLimit + RESCUE_RELAX.intervalCv) return;
+    if (cv > cvLimit) strict = false;
+    const baseFraction = baseCount / intervals.length;
+    if (baseFraction < options.minBaseIntervalFraction - RESCUE_RELAX.baseIntervalFraction) return;
+    if (baseFraction < options.minBaseIntervalFraction) strict = false;
 
     // 时长一致性：呼噜每声长短相近；说话短语忽长忽短（"嗯"和整句话混在一起）
     const durations = group.map((b) => b.endTime - b.startTime);
     const durMean = durations.reduce((a, b) => a + b, 0) / durations.length;
     const durVariance = durations.reduce((a, b) => a + (b - durMean) ** 2, 0) / durations.length;
     const durCv = durMean > 0 ? Math.sqrt(durVariance) / durMean : 1;
-    if (durCv > options.maxDurationCv) return;
+    if (durCv > options.maxDurationCv + RESCUE_RELAX.durationCv) return;
+    if (durCv > options.maxDurationCv) strict = false;
 
     // 占空比：呼噜是短响长停（响声只占呼吸周期的一小段），说话是长响短停。
     // 按折叠前的原始突发计算——双声呼噜折叠后的时长横跨半个呼吸周期，直接算会虚高。
@@ -294,34 +340,49 @@ function groupIntoEpisodes(
     for (const b of rawGroup) {
       activeMs += Math.max(options.minBurstMs, b.endTime - b.startTime - sampleIntervalMs);
     }
-    if (span > 0 && activeMs / span > dutyLimit) return;
+    const duty = span > 0 ? activeMs / span : 0;
+    if (duty > dutyLimit + RESCUE_RELAX.dutyCycle) return;
+    if (duty > dutyLimit) strict = false;
 
     // 时长-间隔相关性：说话是"说完长句才停顿"，每声时长和到下一声的间隔强正相关；
-    // 呼噜每声时长恒定、间隔由呼吸节律决定，两者无关。样本相关系数噪声随样本数减小
-    // （σ≈1/√(n-1)），间隔少于 8 个时不判定，避免误伤真呼噜（小组另有更严的节律门槛）。
+    // 呼噜每声时长恒定、间隔由呼吸节律决定，两者无关。
     // 用折叠前的原始突发计算，单边门槛（双声打鼾天然负相关，不受影响）。
-    // 仅对高频数据启用：旧版 1Hz 数据的时长测量只剩整秒档位，量化误差会造出虚假相关
-    if (rawGroup.length >= 9 && sampleIntervalMs <= 500) {
-      const n = rawGroup.length - 1;
+    // 两个防误伤措施（v3，真机反馈漏报的主要来源）：
+    // - 剔除漏气间隔（> 基准周期 1.5 倍）：这类间隔是杠杆点，碰巧配上偏长的
+    //   一声就会把 r 拉爆，导致漏气打鼾整段被误杀
+    // - 样本少于 12 个不判定：采样量化在时长和间隔上引入同源误差，样本少时
+    //   这种虚假相关主导 r（长呼噜短段落的主要漏报来源）；旧版 1Hz 数据
+    //   量化误差更大，整体不启用
+    if (sampleIntervalMs <= 500 && rawGroup.length >= 3) {
+      const rawIntervals: number[] = [];
+      for (let i = 1; i < rawGroup.length; i++) {
+        rawIntervals.push(rawGroup[i].startTime - rawGroup[i - 1].startTime);
+      }
+      const sortedRaw = [...rawIntervals].sort((a, b) => a - b);
+      const rawBase = sortedRaw[Math.floor(sortedRaw.length / 2)];
       const durs: number[] = [];
       const gaps: number[] = [];
-      for (let i = 0; i < n; i++) {
+      for (let i = 0; i < rawIntervals.length; i++) {
+        if (rawIntervals[i] > rawBase * 1.5) continue; // 漏气间隔不参与
         durs.push(rawGroup[i].endTime - rawGroup[i].startTime);
-        gaps.push(rawGroup[i + 1].startTime - rawGroup[i].startTime);
+        gaps.push(rawIntervals[i]);
       }
-      const dMean = durs.reduce((a, b) => a + b, 0) / n;
-      const gMean = gaps.reduce((a, b) => a + b, 0) / n;
-      let cov = 0, dVar = 0, gVar = 0;
-      for (let i = 0; i < n; i++) {
-        cov += (durs[i] - dMean) * (gaps[i] - gMean);
-        dVar += (durs[i] - dMean) ** 2;
-        gVar += (gaps[i] - gMean) ** 2;
+      const n = durs.length;
+      if (n >= 12) {
+        const dMean = durs.reduce((a, b) => a + b, 0) / n;
+        const gMean = gaps.reduce((a, b) => a + b, 0) / n;
+        let cov = 0, dVar = 0, gVar = 0;
+        for (let i = 0; i < n; i++) {
+          cov += (durs[i] - dMean) * (gaps[i] - gMean);
+          dVar += (durs[i] - dMean) ** 2;
+          gVar += (gaps[i] - gMean) ** 2;
+        }
+        const denom = Math.sqrt(dVar * gVar);
+        const corr = denom > 0 ? cov / denom : 0;
+        // 真假分布有重叠（真呼噜偶尔也会抽到偏高的 r），0.5 是漏报/误报的折中
+        if (corr > options.maxDurationIntervalCorr + RESCUE_RELAX.durationIntervalCorr) return;
+        if (corr > options.maxDurationIntervalCorr) strict = false;
       }
-      const denom = Math.sqrt(dVar * gVar);
-      const corr = denom > 0 ? cov / denom : 0;
-      // 真假分布有重叠（真呼噜偶尔也会抽到偏高的 r），0.5 是漏报/误报的折中：
-      // 段级漏报约 3%（对整晚汇总无感），说话误报降到 <10%
-      if (corr > options.maxDurationIntervalCorr) return;
     }
 
     // 响度渐变：呼噜相邻两声的响度接近（整段可以慢慢变响/变轻），
@@ -333,32 +394,11 @@ function groupIntoEpisodes(
       }
       jumps.sort((a, b) => a - b);
       const medianJump = jumps[Math.floor(jumps.length / 2)];
-      if (medianJump > options.maxMedianPeakJumpDb) return;
+      if (medianJump > options.maxMedianPeakJumpDb + RESCUE_RELAX.medianPeakJumpDb) return;
+      if (medianJump > options.maxMedianPeakJumpDb) strict = false;
     }
 
-    // 置信度：响度突出程度 + 节律规律程度 + 持续次数
-    const avgProminence = group.reduce((a, b) => a + b.peakProminence, 0) / group.length;
-    const prominenceScore = Math.min(1, Math.max(0, (avgProminence - options.prominenceDb) / 10));
-    const regularityScore = Math.min(1, Math.max(0, 1 - cv / options.maxIntervalCv));
-    const countScore = Math.min(1, (group.length - options.minBurstsPerEpisode) / 7);
-    const confidence = Math.round(
-      (0.25 + 0.75 * (0.45 * prominenceScore + 0.35 * regularityScore + 0.2 * countScore)) * 100
-    ) / 100;
-
-    episodes.push({
-      startTime: group[0].startTime,
-      endTime: group[group.length - 1].endTime,
-      burstCount: group.length,
-      confidence,
-    });
-    for (const burst of group) {
-      events.push({
-        startTime: burst.startTime,
-        endTime: burst.endTime,
-        maxDecibel: Math.round(burst.maxDecibel),
-        confidence,
-      });
-    }
+    candidates.push({ group, cv, strict });
   };
 
   let group: Burst[] = [];
@@ -372,6 +412,49 @@ function groupIntoEpisodes(
     }
   }
   evaluateGroup(group);
+
+  // 严格达标的段落直接采纳；只过宽松档的段落邻近（±RESCUE_WINDOW_MS）
+  // 任一严格段落时救回，否则丢弃
+  const strictRanges = candidates
+    .filter((c) => c.strict)
+    .map((c) => ({
+      start: c.group[0].startTime,
+      end: c.group[c.group.length - 1].endTime,
+    }));
+
+  for (const candidate of candidates) {
+    const g = candidate.group;
+    const accepted = candidate.strict || strictRanges.some(
+      (r) =>
+        g[0].startTime <= r.end + RESCUE_WINDOW_MS &&
+        r.start <= g[g.length - 1].endTime + RESCUE_WINDOW_MS
+    );
+    if (!accepted) continue;
+
+    // 置信度：响度突出程度 + 节律规律程度 + 持续次数（救回的段落再打个折）
+    const avgProminence = g.reduce((a, b) => a + b.peakProminence, 0) / g.length;
+    const prominenceScore = Math.min(1, Math.max(0, (avgProminence - options.prominenceDb) / 10));
+    const regularityScore = Math.min(1, Math.max(0, 1 - candidate.cv / options.maxIntervalCv));
+    const countScore = Math.min(1, (g.length - options.minBurstsPerEpisode) / 7);
+    let confidence = 0.25 + 0.75 * (0.45 * prominenceScore + 0.35 * regularityScore + 0.2 * countScore);
+    if (!candidate.strict) confidence *= 0.85;
+    confidence = Math.round(confidence * 100) / 100;
+
+    episodes.push({
+      startTime: g[0].startTime,
+      endTime: g[g.length - 1].endTime,
+      burstCount: g.length,
+      confidence,
+    });
+    for (const burst of g) {
+      events.push({
+        startTime: burst.startTime,
+        endTime: burst.endTime,
+        maxDecibel: Math.round(burst.maxDecibel),
+        confidence,
+      });
+    }
+  }
 
   return { events, episodes };
 }
