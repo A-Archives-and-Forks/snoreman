@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { File, Paths } from 'expo-file-system';
 import i18n, { getDateLocale } from '@/i18n';
 import { encodeDecibelData, decodeDecibelData } from '@/utils/decibel-codec';
-import { analyzeSnoringAuto } from '@/utils/snore-detection';
+import { analyzeSnoringAuto, DETECTION_ALGO_VERSION } from '@/utils/snore-detection';
 
 // 分贝数据点 - 每秒一个采样点
 export interface DecibelDataPoint {
@@ -38,6 +38,7 @@ export interface SnoreAnalysis {
   analyzedAt: number;
   snoreEvents: SnoreEvent[]; // 打鼾事件列表
   method?: 'auto' | 'threshold'; // 分析方式：自动识别 / 固定阈值（旧版）
+  algoVersion?: number; // 产出该结果的检测算法版本，低于当前版本会在后台重算
 }
 
 export interface SnoreEvent {
@@ -226,8 +227,19 @@ function isDurationTruncated(meta: RecordingMeta): boolean {
   return events[events.length - 1].endTime > meta.duration + 1000;
 }
 
-// 将旧录音（阈值分析或无分析）批量迁移为自动识别结果，顺带修复被截断的时长
-// 一次性、幂等：迁移完所有录音的 analysis.method 都是 'auto' 且时长自洽，
+// 需要（重新）分析的录音：没做过自动分析、算法版本落后、或时长被截断
+// 注意：算法升级重算会覆盖用户手动删除误报片段的编辑（现有数据无法区分），
+// 换来的是整个历史记录都用上最新的判定规则
+function needsReanalysis(meta: RecordingMeta): boolean {
+  return (
+    meta.analysis?.method !== 'auto' ||
+    (meta.analysis.algoVersion ?? 0) < DETECTION_ALGO_VERSION ||
+    isDurationTruncated(meta)
+  );
+}
+
+// 将旧录音批量迁移为最新的自动识别结果（含算法升级重算），顺带修复被截断的时长
+// 一次性、幂等：迁移完所有录音的 analysis 都是当前算法版本且时长自洽，
 // 再次调用会立即返回。元数据只在最后统一写回一次（避免每条都全量重写），
 // 每处理一条通过 onProgress 回调让 UI 渐进刷新，并让出事件循环保持列表滑动流畅。
 export async function migrateRecordingsToAuto(
@@ -235,15 +247,13 @@ export async function migrateRecordingsToAuto(
 ): Promise<void> {
   try {
     const metas = await getRecordingsMeta();
-    const hasPending = metas.some(
-      (m) => m.analysis?.method !== 'auto' || isDurationTruncated(m)
-    );
+    const hasPending = metas.some(needsReanalysis);
     if (!hasPending) return;
 
     let changed = false;
     for (let i = 0; i < metas.length; i++) {
       const meta = metas[i];
-      if (meta.analysis?.method === 'auto' && !isDurationTruncated(meta)) continue;
+      if (!needsReanalysis(meta)) continue;
 
       // 优先用高频数据（250ms）重算，没有时退回每秒聚合数据
       const fullRate = loadFullRateData(meta.id);
