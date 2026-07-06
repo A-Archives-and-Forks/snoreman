@@ -30,6 +30,27 @@ In the output, you'll find options to open the app a limited sandbox for trying 
 
 You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
 
+## Snore detection algorithm
+
+Detection lives in [`utils/snore-detection.ts`](utils/snore-detection.ts). Each saved
+analysis records the `DETECTION_ALGO_VERSION` it was produced with.
+
+When you change the detection logic, bump `DETECTION_ALGO_VERSION`. On the next app
+launch, the background pass in [`utils/storage.ts`](utils/storage.ts)
+(`migrateRecordingsToAuto`) finds every recording whose analysis is behind the current
+version and re-runs it from the stored raw decibel data — so the whole history is always
+scored with the latest algorithm. **Forget to bump, and old recordings keep their stale
+results.**
+
+Caveat: re-analysis overwrites any manual edits (e.g. deleted false-positive segments),
+since those aren't distinguishable from algorithm output in the stored data.
+
+Regression check for the algorithm (synthetic snore / speech / washing scenarios):
+
+```bash
+npx tsx scripts/test-snore-detection/run.ts
+```
+
 ## Release app
 
 Via GitHub Actions (recommended):
