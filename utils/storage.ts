@@ -11,20 +11,29 @@ export interface DecibelDataPoint {
   isSnoring?: boolean; // 已废弃：是否打鼾由分析函数产出，不再逐点存储
 }
 
+// 元数据里的分析摘要：不含 snoreEvents。事件列表单独按录音存储——重度打鼾
+// 一晚可达 2000+ 事件（~170KB JSON），内联在元数据里会让列表无限膨胀：
+// 每次进首页整包 parse，且 Android 的 AsyncStorage 单条目默认上限 2MB，
+// 几十条录音就会读取失败
+export type SnoreAnalysisSummary = Omit<SnoreAnalysis, 'snoreEvents'> & {
+  snoreEvents?: SnoreEvent[]; // 旧格式兼容：未迁移的数据仍内联，迁移后消失
+};
+
 // 录音元数据（不含分贝数据，用于列表显示）
 export interface RecordingMeta {
   id: string;
   uri: string;
   createdAt: number;
   duration: number; // in milliseconds
-  analysis?: SnoreAnalysis;
+  analysis?: SnoreAnalysisSummary;
   threshold?: number; // 打鼾阈值
   dataPointCount?: number; // 分贝数据点数量
 }
 
-// 完整录音数据（含分贝数据）
+// 完整录音数据（含分贝数据和完整分析结果）
 export interface Recording extends RecordingMeta {
   decibelData: DecibelDataPoint[]; // 分贝数据
+  analysis?: SnoreAnalysis;
 }
 
 export interface SnoreAnalysis {
@@ -57,6 +66,31 @@ const RECORDINGS_KEY = 'sleep_recordings'; // 旧版兼容
 // 获取分贝数据的存储 key
 function getDecibelDataKey(id: string): string {
   return `decibel_data_${id}`;
+}
+
+// 获取打鼾事件列表的存储 key
+function getSnoreEventsKey(id: string): string {
+  return `snore_events_${id}`;
+}
+
+// 打鼾事件列表按录音单独存取（原因见 SnoreAnalysisSummary 注释）
+async function saveSnoreEvents(id: string, events: SnoreEvent[]): Promise<void> {
+  await AsyncStorage.setItem(getSnoreEventsKey(id), JSON.stringify(events));
+}
+
+async function loadSnoreEvents(id: string): Promise<SnoreEvent[] | null> {
+  try {
+    const data = await AsyncStorage.getItem(getSnoreEventsKey(id));
+    return data ? JSON.parse(data) : null;
+  } catch (error) {
+    return null;
+  }
+}
+
+// 剥离事件列表，得到可放进元数据的分析摘要
+function stripAnalysisForMeta(analysis: SnoreAnalysis | SnoreAnalysisSummary): SnoreAnalysisSummary {
+  const { snoreEvents, ...summary } = analysis;
+  return summary;
 }
 
 // ---- 高频分贝数据（250ms 采样，二进制文件存储，一晚约 113KB）----
@@ -182,6 +216,11 @@ export async function saveRecording(recording: Recording, fullRateData?: Decibel
       saveFullRateData(recording.id, fullRateData);
     }
 
+    // 打鼾事件列表单独存储，元数据只放摘要
+    if (recording.analysis) {
+      await saveSnoreEvents(recording.id, recording.analysis.snoreEvents);
+    }
+
     // 2. 保存元数据
     const metas = await getRecordingsMeta();
     const meta: RecordingMeta = {
@@ -189,7 +228,7 @@ export async function saveRecording(recording: Recording, fullRateData?: Decibel
       uri: recording.uri,
       createdAt: recording.createdAt,
       duration: recording.duration,
-      analysis: recording.analysis,
+      analysis: recording.analysis ? stripAnalysisForMeta(recording.analysis) : undefined,
       threshold: recording.threshold,
       dataPointCount: recording.decibelData?.length || 0,
     };
@@ -200,18 +239,26 @@ export async function saveRecording(recording: Recording, fullRateData?: Decibel
   }
 }
 
-// 获取单个录音（含分贝数据）
+// 获取单个录音（含分贝数据和完整分析结果）
 export async function getRecording(id: string): Promise<Recording | null> {
   try {
     const metas = await getRecordingsMeta();
     const meta = metas.find((r) => r.id === id);
     if (!meta) return null;
-    
+
     // 加载分贝数据
     const decibelData = await getDecibelData(id);
-    
+
+    // 补全打鼾事件列表：单独存储的是权威来源，退回旧格式内联的
+    let analysis: SnoreAnalysis | undefined;
+    if (meta.analysis) {
+      const events = (await loadSnoreEvents(id)) ?? meta.analysis.snoreEvents ?? [];
+      analysis = { ...meta.analysis, snoreEvents: events };
+    }
+
     return {
       ...meta,
+      analysis,
       decibelData: decibelData || [],
     };
   } catch (error) {
@@ -227,14 +274,16 @@ function isDurationTruncated(meta: RecordingMeta): boolean {
   return events[events.length - 1].endTime > meta.duration + 1000;
 }
 
-// 需要（重新）分析的录音：没做过自动分析、算法版本落后、或时长被截断
+// 需要（重新）分析的录音：没做过自动分析、算法版本落后、时长被截断、
+// 或事件列表还内联在元数据里（旧格式，重算时顺带拆分存储）
 // 注意：算法升级重算会覆盖用户手动删除误报片段的编辑（现有数据无法区分），
 // 换来的是整个历史记录都用上最新的判定规则
 function needsReanalysis(meta: RecordingMeta): boolean {
   return (
     meta.analysis?.method !== 'auto' ||
     (meta.analysis.algoVersion ?? 0) < DETECTION_ALGO_VERSION ||
-    isDurationTruncated(meta)
+    isDurationTruncated(meta) ||
+    (meta.analysis.snoreEvents?.length ?? 0) > 0
   );
 }
 
@@ -264,8 +313,10 @@ export async function migrateRecordingsToAuto(
 
       // 被截断的时长用数据的最后时间戳修复（正常录音时长≥最后采样点，取 max 不影响）
       const duration = Math.max(meta.duration, source[source.length - 1].timestamp);
+      const analysis = analyzeSnoringAuto(source, duration);
+      await saveSnoreEvents(meta.id, analysis.snoreEvents);
       // 替换成新对象（而非原地修改），保证列表按 item 引用比较时能刷新该行
-      metas[i] = { ...meta, duration, analysis: analyzeSnoringAuto(source, duration) };
+      metas[i] = { ...meta, duration, analysis: stripAnalysisForMeta(analysis) };
       changed = true;
       onProgress?.([...metas]);
 
@@ -286,12 +337,15 @@ export async function updateRecording(id: string, updates: Partial<Recording>): 
     const metas = await getRecordingsMeta();
     const index = metas.findIndex((r) => r.id === id);
     if (index !== -1) {
-      // 更新元数据
-      const { decibelData, ...metaUpdates } = updates;
+      // 分贝数据、打鼾事件列表都单独保存，元数据里只放分析摘要
+      const { decibelData, analysis, ...metaUpdates } = updates;
       metas[index] = { ...metas[index], ...metaUpdates };
+      if (analysis) {
+        await saveSnoreEvents(id, analysis.snoreEvents);
+        metas[index].analysis = stripAnalysisForMeta(analysis);
+      }
       await AsyncStorage.setItem(RECORDINGS_META_KEY, JSON.stringify(metas));
-      
-      // 如果有分贝数据更新，单独保存
+
       if (decibelData) {
         await AsyncStorage.setItem(getDecibelDataKey(id), JSON.stringify(decibelData));
       }
@@ -354,8 +408,9 @@ export async function deleteRecording(id: string): Promise<void> {
       } catch (e) {
       }
       
-      // 删除分贝数据
+      // 删除分贝数据和打鼾事件列表
       await AsyncStorage.removeItem(getDecibelDataKey(id));
+      await AsyncStorage.removeItem(getSnoreEventsKey(id));
 
       // 删除高频分贝数据文件
       try {
