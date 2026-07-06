@@ -81,7 +81,6 @@ export function useRecording(): UseRecordingResult {
   const detectionIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const recordingIdRef = useRef<string | null>(null);
   const isRecordingRef = useRef<boolean>(false);
-  const durationRef = useRef<number>(0);
 
   // 将 metering 值转换为更准确的分贝显示
   // expo-audio 的 metering 返回 dBFS (decibels relative to full scale)
@@ -215,11 +214,9 @@ export function useRecording(): UseRecordingResult {
   // 开始计时
   const startDurationTimer = useCallback(() => {
     durationIntervalRef.current = setInterval(() => {
-      const d = Date.now() - startTimeRef.current;
-      durationRef.current = d;
-      // 息屏/后台时跳过 UI 更新（同 metering，时长仍在 ref 中累计）
+      // 息屏/后台时跳过 UI 更新（同 metering；最终时长在停止时按墙钟计算）
       if (AppState.currentState === 'active') {
-        setDuration(d);
+        setDuration(Date.now() - startTimeRef.current);
       }
     }, 1000);
   }, []);
@@ -251,7 +248,6 @@ export function useRecording(): UseRecordingResult {
       setDuration(0);
       setLiveSnoreCount(0);
       setIsLikelySnoring(false);
-      durationRef.current = 0;
       startTimeRef.current = Date.now();
 
       // 请求权限（异步，不阻塞 UI）
@@ -306,7 +302,9 @@ export function useRecording(): UseRecordingResult {
         return null;
       }
 
-      const finalDuration = durationRef.current;
+      // 时长直接按墙钟算，不取计时器最后一次 tick 的值：
+      // 整夜息屏时定时器/AppState 的行为不可靠，曾导致整晚录音只存下锁屏前的时长
+      const finalDuration = Date.now() - startTimeRef.current;
       const finalDecibelData = [...decibelDataRef.current];
       const finalFullRateData = [...fullRateDataRef.current];
 

@@ -218,22 +218,32 @@ export async function getRecording(id: string): Promise<Recording | null> {
   }
 }
 
-// 将旧录音（阈值分析或无分析）批量迁移为自动识别结果
-// 一次性、幂等：迁移完所有录音的 analysis.method 都是 'auto'，再次调用会立即返回。
-// 元数据只在最后统一写回一次（避免每条都全量重写），每处理一条通过 onProgress
-// 回调让 UI 渐进刷新，并让出事件循环保持列表滑动流畅。
+// 时长被截断的录音：曾有 bug 整夜录音只存下锁屏前的时长（分贝数据和打鼾
+// 分析是完整的），打鼾事件的时间超出记录时长即可判定，留 1 秒容差
+function isDurationTruncated(meta: RecordingMeta): boolean {
+  const events = meta.analysis?.snoreEvents;
+  if (!events || events.length === 0) return false;
+  return events[events.length - 1].endTime > meta.duration + 1000;
+}
+
+// 将旧录音（阈值分析或无分析）批量迁移为自动识别结果，顺带修复被截断的时长
+// 一次性、幂等：迁移完所有录音的 analysis.method 都是 'auto' 且时长自洽，
+// 再次调用会立即返回。元数据只在最后统一写回一次（避免每条都全量重写），
+// 每处理一条通过 onProgress 回调让 UI 渐进刷新，并让出事件循环保持列表滑动流畅。
 export async function migrateRecordingsToAuto(
   onProgress?: (metas: RecordingMeta[]) => void
 ): Promise<void> {
   try {
     const metas = await getRecordingsMeta();
-    const hasPending = metas.some((m) => m.analysis?.method !== 'auto');
+    const hasPending = metas.some(
+      (m) => m.analysis?.method !== 'auto' || isDurationTruncated(m)
+    );
     if (!hasPending) return;
 
     let changed = false;
     for (let i = 0; i < metas.length; i++) {
       const meta = metas[i];
-      if (meta.analysis?.method === 'auto') continue;
+      if (meta.analysis?.method === 'auto' && !isDurationTruncated(meta)) continue;
 
       // 优先用高频数据（250ms）重算，没有时退回每秒聚合数据
       const fullRate = loadFullRateData(meta.id);
@@ -242,8 +252,10 @@ export async function migrateRecordingsToAuto(
         : await getDecibelData(meta.id);
       if (!source || source.length === 0) continue;
 
+      // 被截断的时长用数据的最后时间戳修复（正常录音时长≥最后采样点，取 max 不影响）
+      const duration = Math.max(meta.duration, source[source.length - 1].timestamp);
       // 替换成新对象（而非原地修改），保证列表按 item 引用比较时能刷新该行
-      metas[i] = { ...meta, analysis: analyzeSnoringAuto(source, meta.duration) };
+      metas[i] = { ...meta, duration, analysis: analyzeSnoringAuto(source, duration) };
       changed = true;
       onProgress?.([...metas]);
 
