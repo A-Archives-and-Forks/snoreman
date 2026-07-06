@@ -8,19 +8,14 @@
 const BRAND = '#6C63FF';
 const BRAND_DARK = '#8B84FF'; // 深色模式下略提亮，保证对比度
 
+// 警示红：深色模式降低饱和度与亮度，避免深色背景上大面积红色刺眼
+const DANGER = '#FF453A';
+const DANGER_DARK = '#E0655C';
+
 // 与场景无关的固定色板
 export const Palette = {
   brand: BRAND,
-  danger: '#FF453A',
   success: '#34C759',
-  // 打鼾严重程度
-  severity: {
-    none: '#34C759',
-    mild: '#8BC34A',
-    moderate: '#FF9F0A',
-    severe: '#FF453A',
-    unknown: '#9E9E9E',
-  },
 };
 
 export const Colors = {
@@ -38,6 +33,15 @@ export const Colors = {
     icon: '#6E6E7A',
     tabIconDefault: '#6E6E7A',
     tabIconSelected: BRAND,
+    danger: DANGER,
+    // 打鼾严重程度
+    severity: {
+      none: '#34C759',
+      mild: '#8BC34A',
+      moderate: '#FF9F0A',
+      severe: DANGER,
+      unknown: '#9E9E9E',
+    },
   },
   dark: {
     text: '#F2F2F7',
@@ -53,6 +57,14 @@ export const Colors = {
     icon: '#9C9CA8',
     tabIconDefault: '#9C9CA8',
     tabIconSelected: BRAND_DARK,
+    danger: DANGER_DARK,
+    severity: {
+      none: '#34C759',
+      mild: '#8BC34A',
+      moderate: '#FF9F0A',
+      severe: DANGER_DARK,
+      unknown: '#9E9E9E',
+    },
   },
 };
 

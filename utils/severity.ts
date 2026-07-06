@@ -1,19 +1,19 @@
 import i18n from '@/i18n';
 import { SnoreAnalysis } from '@/utils/storage';
-import { Palette } from '@/constants/theme';
+import { ThemeColors } from '@/constants/theme';
 
-export function getSeverityColor(severity: SnoreAnalysis['severity'] | string): string {
+export function getSeverityColor(severity: SnoreAnalysis['severity'] | string, colors: ThemeColors): string {
   switch (severity) {
     case 'none':
-      return Palette.severity.none;
+      return colors.severity.none;
     case 'mild':
-      return Palette.severity.mild;
+      return colors.severity.mild;
     case 'moderate':
-      return Palette.severity.moderate;
+      return colors.severity.moderate;
     case 'severe':
-      return Palette.severity.severe;
+      return colors.severity.severe;
     default:
-      return Palette.severity.unknown;
+      return colors.severity.unknown;
   }
 }
 

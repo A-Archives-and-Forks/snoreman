@@ -99,8 +99,10 @@ export default function HomeScreen() {
       const result = await stopRecording();
       
       if (result && result.uri) {
-        // 保存当前 duration，因为 stopRecording 后 hook 的 duration 会被重置
-        const recordingDuration = duration;
+        // 时长必须用 stopRecording 的返回值（按墙钟计算）。
+        // 不能用 hook 的 duration state：息屏/后台期间它不更新，
+        // 整夜录音时还停留在锁屏前的值，曾导致 9 小时录音只存了 30 秒
+        const recordingDuration = result.duration;
         
         // 生成唯一的录音 ID
         const recordingId = Date.now().toString(36) + Math.random().toString(36).substr(2);
@@ -190,7 +192,7 @@ export default function HomeScreen() {
 
     return (
       <TouchableOpacity
-        style={styles.deleteAction}
+        style={[styles.deleteAction, { backgroundColor: colors.danger }]}
         onPress={() => handleDirectDelete(itemId)}
         accessibilityLabel={i18n.t('home.delete')}
         accessibilityRole="button"
@@ -232,7 +234,7 @@ export default function HomeScreen() {
         </View>
         {item.analysis ? (
           <View style={styles.snoreStat}>
-            <ThemedText style={[styles.snoreStatValue, { color: getSeverityColor(item.analysis.severity) }]}>
+            <ThemedText style={[styles.snoreStatValue, { color: getSeverityColor(item.analysis.severity, colors) }]}>
               {item.analysis.snoreCount}
             </ThemedText>
             <ThemedText style={[styles.snoreStatLabel, { color: colors.textFaint }]}>
@@ -278,21 +280,21 @@ export default function HomeScreen() {
           {/* 实时分贝显示 */}
           <View style={styles.decibelDisplay}>
             <View style={styles.decibelHeader}>
-              <View style={[styles.recordingDot, { backgroundColor: isLikelySnoring ? Palette.danger : Palette.success }]} />
+              <View style={[styles.recordingDot, { backgroundColor: isLikelySnoring ? colors.danger : Palette.success }]} />
               <ThemedText style={[styles.recordingTimeText, { color: colors.textMuted }]}>
                 {formatDuration(duration)}
               </ThemedText>
             </View>
 
             <View style={styles.decibelValueContainer}>
-              <ThemedText style={[styles.decibelValue, { color: isLikelySnoring ? Palette.danger : colors.brand }]}>
+              <ThemedText style={[styles.decibelValue, { color: isLikelySnoring ? colors.danger : colors.brand }]}>
                 {Math.round(currentDecibel)}
               </ThemedText>
               <ThemedText style={[styles.decibelUnit, { color: colors.textFaint }]}>dB</ThemedText>
             </View>
 
-            <View style={[styles.snoringAlert, { backgroundColor: Palette.danger + '1F', opacity: isLikelySnoring ? 1 : 0 }]}>
-              <ThemedText style={[styles.snoringAlertText, { color: Palette.danger }]}>{i18n.t('home.snoreDetected')}</ThemedText>
+            <View style={[styles.snoringAlert, { backgroundColor: colors.danger + '1F', opacity: isLikelySnoring ? 1 : 0 }]}>
+              <ThemedText style={[styles.snoringAlertText, { color: colors.danger }]}>{i18n.t('home.snoreDetected')}</ThemedText>
             </View>
           </View>
 
@@ -313,8 +315,8 @@ export default function HomeScreen() {
       )}
 
       {error && (
-        <View style={[styles.errorContainer, { backgroundColor: Palette.danger + '1A' }]}>
-          <ThemedText style={[styles.errorText, { color: Palette.danger }]}>{error}</ThemedText>
+        <View style={[styles.errorContainer, { backgroundColor: colors.danger + '1A' }]}>
+          <ThemedText style={[styles.errorText, { color: colors.danger }]}>{error}</ThemedText>
         </View>
       )}
 
@@ -344,8 +346,8 @@ export default function HomeScreen() {
           style={[
             styles.recordButton,
             {
-              backgroundColor: isRecording ? Palette.danger : colors.brand,
-              shadowColor: isRecording ? Palette.danger : colors.brand,
+              backgroundColor: isRecording ? colors.danger : colors.brand,
+              shadowColor: isRecording ? colors.danger : colors.brand,
             },
           ]}
           onPress={isRecording ? handleStopRecording : handleStartRecording}
@@ -578,7 +580,6 @@ const styles = StyleSheet.create({
     marginTop: Spacing.md,
   },
   deleteAction: {
-    backgroundColor: Palette.danger,
     justifyContent: 'center',
     alignItems: 'center',
     width: 80,

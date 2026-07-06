@@ -368,9 +368,9 @@ export default function RecordingDetailScreen() {
           >
             <View style={[styles.severityRow, { borderBottomColor: colors.border }]}>
               <ThemedText style={[styles.severityLabel, { color: colors.textMuted }]}>{i18n.t('recording.severityLabel')}</ThemedText>
-              <View style={[styles.severityBadge, { backgroundColor: getSeverityColor(autoAnalysis.severity) + '1F' }]}>
-                <View style={[styles.severityBadgeDot, { backgroundColor: getSeverityColor(autoAnalysis.severity) }]} />
-                <ThemedText style={[styles.severityBadgeText, { color: getSeverityColor(autoAnalysis.severity) }]}>
+              <View style={[styles.severityBadge, { backgroundColor: getSeverityColor(autoAnalysis.severity, colors) + '1F' }]}>
+                <View style={[styles.severityBadgeDot, { backgroundColor: getSeverityColor(autoAnalysis.severity, colors) }]} />
+                <ThemedText style={[styles.severityBadgeText, { color: getSeverityColor(autoAnalysis.severity, colors) }]}>
                   {getSeverityText(autoAnalysis.severity)}
                 </ThemedText>
               </View>
@@ -416,14 +416,14 @@ export default function RecordingDetailScreen() {
                 <ThemedText style={[styles.legendText, { color: colors.textMuted }]}>{i18n.t('recording.legendNormal')}</ThemedText>
               </View>
               <View style={styles.legendItem}>
-                <View style={[styles.legendDot, { backgroundColor: Palette.danger }]} />
+                <View style={[styles.legendDot, { backgroundColor: colors.danger }]} />
                 <ThemedText style={[styles.legendText, { color: colors.textMuted }]}>
                   {i18n.t(analysisMode === 'auto' ? 'recording.legendSnore' : 'recording.legendOverThreshold')}
                 </ThemedText>
               </View>
               {analysisMode === 'manual' && (
                 <View style={styles.legendItem}>
-                  <View style={[styles.legendLine, { backgroundColor: Palette.severity.moderate }]} />
+                  <View style={[styles.legendLine, { backgroundColor: colors.severity.moderate }]} />
                   <ThemedText style={[styles.legendText, { color: colors.textMuted }]}>{i18n.t('recording.legendThreshold')} {threshold}dB</ThemedText>
                 </View>
               )}
@@ -431,8 +431,8 @@ export default function RecordingDetailScreen() {
 
             {/* 旧版本录音精度提示 */}
             {analysisMode === 'auto' && !hasFullRate && (
-              <View style={[styles.legacyHint, { backgroundColor: Palette.severity.moderate + '1A' }]}>
-                <Ionicons name="information-circle-outline" size={16} color={Palette.severity.moderate} />
+              <View style={[styles.legacyHint, { backgroundColor: colors.severity.moderate + '1A' }]}>
+                <Ionicons name="information-circle-outline" size={16} color={colors.severity.moderate} />
                 <ThemedText style={[styles.legacyHintText, { color: colors.textMuted }]}>
                   {i18n.t('recording.legacyHint')}
                 </ThemedText>
@@ -620,13 +620,13 @@ export default function RecordingDetailScreen() {
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={styles.deleteButton}
+            style={[styles.deleteButton, { borderColor: colors.danger }]}
             onPress={handleDelete}
             activeOpacity={0.8}
             accessibilityLabel={i18n.t('recording.delete')}
             accessibilityRole="button"
           >
-            <ThemedText style={styles.deleteButtonText}>{i18n.t('recording.delete')}</ThemedText>
+            <ThemedText style={[styles.deleteButtonText, { color: colors.danger }]}>{i18n.t('recording.delete')}</ThemedText>
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -854,10 +854,8 @@ const styles = StyleSheet.create({
     borderRadius: Radius.md,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: Palette.danger,
   },
   deleteButtonText: {
-    color: Palette.danger,
     fontSize: FontSize.md,
     fontWeight: '600',
   },

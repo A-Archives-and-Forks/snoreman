@@ -433,7 +433,7 @@ export const AudioPlayerChart = forwardRef<AudioPlayerChartHandle, AudioPlayerCh
             <View
               style={[
                 styles.thresholdLine,
-                { top: thresholdY, backgroundColor: Palette.severity.moderate },
+                { top: thresholdY, backgroundColor: colors.severity.moderate },
               ]}
               pointerEvents="none"
             />
@@ -453,7 +453,7 @@ export const AudioPlayerChart = forwardRef<AudioPlayerChartHandle, AudioPlayerCh
                     width: BAR_WIDTH,
                     height: barHeight,
                     bottom: 0,
-                    backgroundColor: isRed ? Palette.danger : colors.brand,
+                    backgroundColor: isRed ? colors.danger : colors.brand,
                     opacity: isRed ? 1 : 0.55,
                   },
                 ]}
@@ -484,6 +484,7 @@ export const AudioPlayerChart = forwardRef<AudioPlayerChartHandle, AudioPlayerCh
                 styles.thresholdThumb,
                 {
                   top: Math.max(0, Math.min(thresholdY - THRESHOLD_THUMB_SIZE / 2, chartHeight - THRESHOLD_THUMB_SIZE)),
+                  backgroundColor: colors.severity.moderate,
                 },
               ]}
               pointerEvents="none"
@@ -710,7 +711,6 @@ const styles = StyleSheet.create({
     width: THRESHOLD_THUMB_SIZE,
     height: THRESHOLD_THUMB_SIZE,
     borderRadius: THRESHOLD_THUMB_SIZE / 2,
-    backgroundColor: Palette.severity.moderate,
     borderWidth: 2,
     borderColor: '#FFFFFF',
   },

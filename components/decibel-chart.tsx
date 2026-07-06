@@ -2,7 +2,6 @@ import React from 'react';
 import { View, StyleSheet } from 'react-native';
 import { DecibelDataPoint, SNORE_THRESHOLD_DB } from '@/utils/storage';
 import { useTheme } from '@/hooks/use-theme';
-import { Palette } from '@/constants/theme';
 
 // 录音时的实时波形显示：展示最近若干个分贝采样点
 interface LiveWaveformProps {
@@ -35,7 +34,7 @@ export function LiveWaveform({ recentData, height = 60, threshold = SNORE_THRESH
               {
                 width: `${barWidthPercent}%`,
                 height: barHeight,
-                backgroundColor: isAboveThreshold ? Palette.danger : colors.brand,
+                backgroundColor: isAboveThreshold ? colors.danger : colors.brand,
                 opacity: 0.3 + (index / dataCount) * 0.7,
                 marginRight: index < displayData.length - 1 ? 1 : 0,
               },
