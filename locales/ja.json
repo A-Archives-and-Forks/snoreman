@@ -22,7 +22,8 @@
     "recordingTips": "使用のヒント",
     "tipCharging": "スマホを充電しておく",
     "tipPosition": "枕元に置く",
-    "tipScreenOff": "画面オフでも録音可能"
+    "tipScreenOff": "画面オフでも録音可能",
+    "tipsContinue": "続ける"
   },
   "recording": {
     "title": "録音の詳細",

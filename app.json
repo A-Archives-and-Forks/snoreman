@@ -7,10 +7,22 @@
     "icon": "./assets/images/icon.png",
     "scheme": "snoreman",
     "locales": {
-      "zh-Hans": { "CFBundleDisplayName": "呼噜娃" },
-      "zh-Hant": { "CFBundleDisplayName": "呼噜娃" },
-      "ja": { "CFBundleDisplayName": "ぐうたん" },
-      "ko": { "CFBundleDisplayName": "쿨쿨박" }
+      "zh-Hans": {
+        "CFBundleDisplayName": "呼噜娃",
+        "NSMicrophoneUsageDescription": "需要使用麦克风来录制睡眠时的音频，以分析打鼾情况"
+      },
+      "zh-Hant": {
+        "CFBundleDisplayName": "呼噜娃",
+        "NSMicrophoneUsageDescription": "需要使用麥克風錄製睡眠時的音訊，以分析打鼾情況"
+      },
+      "ja": {
+        "CFBundleDisplayName": "ぐうたん",
+        "NSMicrophoneUsageDescription": "いびきを分析するため、睡眠中の音声をマイクで録音します"
+      },
+      "ko": {
+        "CFBundleDisplayName": "쿨쿨박",
+        "NSMicrophoneUsageDescription": "코골이 분석을 위해 수면 중 오디오를 마이크로 녹음합니다"
+      }
     },
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
@@ -18,7 +30,7 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.snoreman.app",
       "infoPlist": {
-        "NSMicrophoneUsageDescription": "需要使用麦克风来录制睡眠时的音频，以分析打鼾情况",
+        "NSMicrophoneUsageDescription": "The microphone is used to record audio while you sleep, so the app can detect and analyze snoring.",
         "UIBackgroundModes": [
           "audio"
         ],
@@ -53,7 +65,7 @@
       [
         "expo-audio",
         {
-          "microphonePermission": "需要使用麦克风来录制睡眠时的音频，以分析打鼾情况"
+          "microphonePermission": "The microphone is used to record audio while you sleep, so the app can detect and analyze snoring."
         }
       ],
       "@react-native-community/datetimepicker",

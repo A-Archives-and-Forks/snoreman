@@ -72,10 +72,12 @@ export function RecordingTipsModal({ visible, onClose, onStartRecording }: Recor
             ))}
           </View>
 
-          {/* 开始录音按钮 */}
+          {/* 继续按钮：文案必须保持中性（Continue/Next），不能写"开始录音"。
+              首次点击会触发系统麦克风权限弹窗，App Store 审核指南 5.1.1(iv)
+              禁止在权限弹窗前的自定义页面上使用引导授权的按钮文案（曾因此被拒） */}
           <TouchableOpacity style={styles.startButton} onPress={handleStart} activeOpacity={0.85}>
-            <Ionicons name="mic" size={18} color="#FFFFFF" />
-            <ThemedText style={styles.startButtonText}>{i18n.t('home.startRecording')}</ThemedText>
+            <ThemedText style={styles.startButtonText}>{i18n.t('home.tipsContinue')}</ThemedText>
+            <Ionicons name="arrow-forward" size={18} color="#FFFFFF" />
           </TouchableOpacity>
         </ThemedView>
       </View>

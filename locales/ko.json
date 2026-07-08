@@ -22,7 +22,8 @@
     "recordingTips": "사용 팁",
     "tipCharging": "휴대폰을 충전 상태로 유지",
     "tipPosition": "머리맡에 두기",
-    "tipScreenOff": "화면이 꺼져도 녹음 가능"
+    "tipScreenOff": "화면이 꺼져도 녹음 가능",
+    "tipsContinue": "계속"
   },
   "recording": {
     "title": "녹음 상세",

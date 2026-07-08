@@ -22,7 +22,8 @@
     "recordingTips": "使用建议",
     "tipCharging": "手机保持充电",
     "tipPosition": "放在靠近床头位置",
-    "tipScreenOff": "支持熄屏录音"
+    "tipScreenOff": "支持熄屏录音",
+    "tipsContinue": "继续"
   },
   "recording": {
     "title": "录音详情",

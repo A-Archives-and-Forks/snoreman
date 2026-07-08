@@ -22,7 +22,8 @@
     "recordingTips": "Usage Tips",
     "tipCharging": "Keep phone charging",
     "tipPosition": "Place near bedside",
-    "tipScreenOff": "Screen-off recording supported"
+    "tipScreenOff": "Screen-off recording supported",
+    "tipsContinue": "Continue"
   },
   "recording": {
     "title": "Recording Details",
