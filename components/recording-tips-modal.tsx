@@ -15,6 +15,10 @@ import i18n from '@/i18n';
 
 interface RecordingTipsModalProps {
   visible: boolean;
+  /** 麦克风权限已授予时为 true。权限未授予时弹窗不可关闭（无 X、无返回键退出），
+      用户只能点"继续"进入系统权限弹窗 —— App Store 5.1.1(iv) 要求
+      权限弹窗前的自定义页面不得提供跳过/延迟授权的出口（曾因 X 按钮被拒） */
+  dismissible: boolean;
   onClose: () => void;
   onStartRecording: () => void;
 }
@@ -25,7 +29,7 @@ const TIPS = [
   { icon: 'moon' as const, key: 'home.tipScreenOff' },
 ];
 
-export function RecordingTipsModal({ visible, onClose, onStartRecording }: RecordingTipsModalProps) {
+export function RecordingTipsModal({ visible, dismissible, onClose, onStartRecording }: RecordingTipsModalProps) {
   const { colors } = useTheme();
 
   const handleStart = () => {
@@ -38,17 +42,19 @@ export function RecordingTipsModal({ visible, onClose, onStartRecording }: Recor
       visible={visible}
       transparent={true}
       animationType="fade"
-      onRequestClose={onClose}
+      onRequestClose={dismissible ? onClose : () => {}}
     >
       <View style={styles.overlay}>
         <ThemedView style={[styles.container, { backgroundColor: colors.surface }]}>
-          {/* 关闭按钮 */}
-          <TouchableOpacity
-            style={[styles.closeButton, { backgroundColor: colors.surfaceSunken }]}
-            onPress={onClose}
-          >
-            <Ionicons name="close" size={20} color={colors.textMuted} />
-          </TouchableOpacity>
+          {/* 关闭按钮：仅在权限已授予后显示，见 dismissible 的注释 */}
+          {dismissible && (
+            <TouchableOpacity
+              style={[styles.closeButton, { backgroundColor: colors.surfaceSunken }]}
+              onPress={onClose}
+            >
+              <Ionicons name="close" size={20} color={colors.textMuted} />
+            </TouchableOpacity>
+          )}
 
           {/* 标题 */}
           <ThemedText style={styles.title}>{i18n.t('home.recordingTips')}</ThemedText>
@@ -74,7 +80,8 @@ export function RecordingTipsModal({ visible, onClose, onStartRecording }: Recor
 
           {/* 继续按钮：文案必须保持中性（Continue/Next），不能写"开始录音"。
               首次点击会触发系统麦克风权限弹窗，App Store 审核指南 5.1.1(iv)
-              禁止在权限弹窗前的自定义页面上使用引导授权的按钮文案（曾因此被拒） */}
+              禁止在权限弹窗前的自定义页面上使用引导授权的按钮文案（曾因此被拒）。
+              同样禁止提供关闭/跳过入口，见 dismissible 的注释 */}
           <TouchableOpacity style={styles.startButton} onPress={handleStart} activeOpacity={0.85}>
             <ThemedText style={styles.startButtonText}>{i18n.t('home.tipsContinue')}</ThemedText>
             <Ionicons name="arrow-forward" size={18} color="#FFFFFF" />

@@ -23,7 +23,10 @@
     "tipCharging": "スマホを充電しておく",
     "tipPosition": "枕元に置く",
     "tipScreenOff": "画面オフでも録音可能",
-    "tipsContinue": "続ける"
+    "tipsContinue": "続ける",
+    "micPermissionTitle": "マイクの権限が必要です",
+    "micPermissionMessage": "マイクへのアクセスが拒否されています。設定で許可すると録音できます。",
+    "openSettings": "設定を開く"
   },
   "recording": {
     "title": "録音の詳細",

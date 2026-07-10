@@ -23,7 +23,10 @@
     "tipCharging": "휴대폰을 충전 상태로 유지",
     "tipPosition": "머리맡에 두기",
     "tipScreenOff": "화면이 꺼져도 녹음 가능",
-    "tipsContinue": "계속"
+    "tipsContinue": "계속",
+    "micPermissionTitle": "마이크 권한 필요",
+    "micPermissionMessage": "마이크 권한이 거부되어 있습니다. 설정에서 허용한 후 녹음할 수 있습니다.",
+    "openSettings": "설정 열기"
   },
   "recording": {
     "title": "녹음 상세",

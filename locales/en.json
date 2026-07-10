@@ -23,7 +23,10 @@
     "tipCharging": "Keep phone charging",
     "tipPosition": "Place near bedside",
     "tipScreenOff": "Screen-off recording supported",
-    "tipsContinue": "Continue"
+    "tipsContinue": "Continue",
+    "micPermissionTitle": "Microphone Access Required",
+    "micPermissionMessage": "Microphone access was denied. Please enable it in Settings to record sleep audio.",
+    "openSettings": "Open Settings"
   },
   "recording": {
     "title": "Recording Details",

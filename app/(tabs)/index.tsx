@@ -6,11 +6,13 @@ import {
   FlatList,
   Alert,
   Animated,
+  Linking,
 } from 'react-native';
 import { Swipeable } from 'react-native-gesture-handler';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { File, Paths } from 'expo-file-system';
+import { AudioModule } from 'expo-audio';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -38,6 +40,7 @@ import { getSeverityColor } from '@/utils/severity';
 export default function HomeScreen() {
   const [recordings, setRecordings] = useState<RecordingMeta[]>([]);
   const [isTipsModalVisible, setIsTipsModalVisible] = useState(false);
+  const [isTipsDismissible, setIsTipsDismissible] = useState(false);
   const [currentLanguage, setCurrentLanguage] = useState(getCurrentLanguage());
 
   const {
@@ -85,7 +88,26 @@ export default function HomeScreen() {
     }, [loadRecordings, runAutoMigration, currentLanguage])
   );
 
-  const handleStartRecording = () => {
+  const handleStartRecording = async () => {
+    const { granted, canAskAgain } = await AudioModule.getRecordingPermissionsAsync();
+
+    // 权限被拒且系统不会再弹授权框（iOS 拒绝过一次即如此）：
+    // 再走提示弹窗只会点"继续"没反应，直接引导去设置开权限
+    if (!granted && !canAskAgain) {
+      Alert.alert(
+        i18n.t('home.micPermissionTitle'),
+        i18n.t('home.micPermissionMessage'),
+        [
+          { text: i18n.t('home.cancel'), style: 'cancel' },
+          { text: i18n.t('home.openSettings'), onPress: () => Linking.openSettings() },
+        ]
+      );
+      return;
+    }
+
+    // 权限未授予时，提示弹窗必须不可关闭（无 X），点"继续"直达系统权限弹窗；
+    // 已授予后弹窗只是使用建议，恢复可关闭。见 RecordingTipsModal 的注释
+    setIsTipsDismissible(granted);
     setIsTipsModalVisible(true);
   };
 
@@ -360,6 +382,7 @@ export default function HomeScreen() {
       <RecordingTipsModal
         key={currentLanguage}
         visible={isTipsModalVisible}
+        dismissible={isTipsDismissible}
         onClose={() => setIsTipsModalVisible(false)}
         onStartRecording={handleConfirmStartRecording}
       />
